@@ -1,0 +1,595 @@
+// Reimplementation of SGI's rope class -*- C++ -*-
+
+// Copyright (C) 2010 Alex Dubov <oakad@yahoo.com>
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as
+// published by the Free Software Foundation; either version 3, or
+// (at your option) any later version.
+
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
+
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
+
+
+// Derived from original implementation
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+// Free Software Foundation, Inc.
+
+// May contain parts
+// Copyright (c) 1997
+// Silicon Graphics Computer Systems, Inc.
+
+// Permission to use, copy, modify, distribute and sell this software
+// and its documentation for any purpose is hereby granted without fee,
+// provided that the above copyright notice appear in all copies and
+// that both that copyright notice and this permission notice appear
+// in supporting documentation.  Silicon Graphics makes no
+// representations about the suitability of this software for any
+// purpose.  It is provided "as is" without express or implied warranty.
+
+#ifndef _EXT_ROPE
+#define _EXT_ROPE 1
+
+#include <functional>
+#include <iterator>
+#include <memory>
+
+template< typename _CharT, typename _Traits = std::char_traits<_CharT>,
+	  typename _Alloc = std::allocator<_CharT> >
+struct rope;
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+class _rope_iterator;
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+class _rope_const_iterator;
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+class _rope_char_ref_proxy;
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+class _rope_char_ptr_proxy;
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+bool operator==(
+	const _rope_char_ptr_proxy<_CharT, _Traits, _Alloc>& __x,
+	const _rope_char_ptr_proxy<_CharT, _Traits, _Alloc>& __y
+);
+/*
+template<typename _CharT, typename _Traits, typename _Alloc>
+_rope_const_iterator<_CharT, _Traits, _Alloc> operator-(
+	const _Rope_const_iterator<_CharT, _Traits, _Alloc>& __x,
+	ptrdiff_t __n
+);
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+_rope_const_iterator<_CharT, _Traits, _Alloc> operator+(
+	const _rope_const_iterator<_CharT, _Traits, _Alloc>& __x,
+	      ptrdiff_t __n);
+
+  template<class _CharT, class _Alloc>
+    _Rope_const_iterator<_CharT, _Traits, _Alloc>
+    operator+(ptrdiff_t __n,
+	      const _Rope_const_iterator<_CharT, _Traits, _Alloc>& __x);
+
+  template<class _CharT, class _Alloc>
+    bool
+    operator==(const _Rope_const_iterator<_CharT, _Traits, _Alloc>& __x,
+	       const _Rope_const_iterator<_CharT, _Traits, _Alloc>& __y);
+
+  template<class _CharT, class _Alloc>
+    bool
+    operator<(const _Rope_const_iterator<_CharT, _Traits, _Alloc>& __x,
+	      const _Rope_const_iterator<_CharT, _Traits, _Alloc>& __y);
+
+  template<class _CharT, class _Alloc>
+    ptrdiff_t
+    operator-(const _Rope_const_iterator<_CharT, _Traits, _Alloc>& __x,
+	      const _Rope_const_iterator<_CharT, _Traits, _Alloc>& __y);
+
+  template<class _CharT, class _Alloc>
+    _Rope_iterator<_CharT, _Traits, _Alloc>
+    operator-(const _Rope_iterator<_CharT, _Traits, _Alloc>& __x, ptrdiff_t __n);
+
+  template<class _CharT, class _Alloc>
+    _Rope_iterator<_CharT, _Traits, _Alloc>
+    operator+(const _Rope_iterator<_CharT, _Traits, _Alloc>& __x, ptrdiff_t __n);
+
+  template<class _CharT, class _Alloc>
+    _Rope_iterator<_CharT, _Traits, _Alloc>
+    operator+(ptrdiff_t __n, const _Rope_iterator<_CharT, _Traits, _Alloc>& __x);
+
+  template<class _CharT, class _Alloc>
+    bool
+    operator==(const _Rope_iterator<_CharT, _Traits, _Alloc>& __x,
+	       const _Rope_iterator<_CharT, _Traits, _Alloc>& __y);
+
+  template<class _CharT, class _Alloc>
+    bool
+    operator<(const _Rope_iterator<_CharT, _Traits, _Alloc>& __x,
+	      const _Rope_iterator<_CharT, _Traits, _Alloc>& __y);
+
+  template<class _CharT, class _Alloc>
+    ptrdiff_t
+    operator-(const _Rope_iterator<_CharT, _Traits, _Alloc>& __x,
+	      const _Rope_iterator<_CharT, _Traits, _Alloc>& __y);
+
+
+
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+rope<_CharT, _Traits, _Alloc> operator+(
+	rope<_CharT, _Traits, _Alloc> const &__left,
+	_CharT const *__right
+);
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+rope<_CharT, _Traits, _Alloc> operator+(
+	rope<_CharT, _Traits, _Alloc> const &__left,
+	_CharT __right
+);
+*/
+template<typename _CharT, typename _Traits, typename _Alloc>
+struct rope
+{
+protected:
+	typedef typename _Alloc::template rebind<char>::other byte_alloc_type;
+	typedef typename byte_alloc_type::size_type byte_size_type;
+
+	typedef typename _Alloc::template rebind<_CharT>::other
+	_CharT_alloc_type;
+
+public:
+	typedef _Traits                               traits_type;
+	typedef typename _Traits::char_type           value_type;
+	typedef _Alloc                                allocator_type;
+	typedef typename _CharT_alloc_type::size_type size_type;
+
+protected:
+	enum
+	{
+		/// For strings shorter than _S_copy_max, we copy to
+		/// concatenate.
+		_S_copy_max = 23,
+
+		/// Maximal rope tree depth.
+		_S_max_rope_depth = 45
+	};
+
+	static const unsigned long _S_min_len[_S_max_rope_depth + 1];
+
+	struct _rope_rep;
+	struct _rope_leaf;
+	struct _rope_concat;
+	struct _rope_substr;
+	struct _rope_func;
+
+	typedef std::shared_ptr<_rope_rep> rope_rep_ptr;
+	typedef std::shared_ptr<_rope_leaf> rope_leaf_ptr;
+	typedef std::shared_ptr<_rope_concat> rope_concat_ptr;
+	typedef std::shared_ptr<_rope_substr> rope_substr_ptr;
+	typedef std::shared_ptr<_rope_func> rope_func_ptr;
+
+	template <typename Tp>
+	struct _rope_rep_deleter
+	{
+		void operator()(Tp *__p)
+		{
+			__p->_M_destroy();
+		}
+	};
+
+	/**
+	 * @brief Fake dynamic cast of _rope_rep pointers.
+	 */
+	template <typename Tp1, typename Tp2>
+	static std::shared_ptr<Tp1> _S_rep_cast(std::shared_ptr<Tp2> __p)
+	{
+		if (!Tp1::_S_tag || (Tp1::_S_tag == __p->_M_tag))
+			return std::static_pointer_cast<Tp1>(__p);
+		else
+			return std::shared_ptr<Tp1>();
+	}
+
+	struct _rope_rep : public _Alloc
+	{
+		enum _tag : uint8_t
+		{
+			_S_rep = 0,
+			_S_leaf,
+			_S_concat,
+			_S_substr,
+			_S_func
+		};
+
+		static const enum _tag _S_tag = _S_rep;
+
+		size_type _M_size;
+		_tag _M_tag;
+		uint8_t _M_depth;
+		uint8_t _M_is_balanced;
+
+		template <typename Tp>
+		typename _Alloc::template rebind<Tp>::other _M_get_alloc()
+		{
+			typedef typename _Alloc::template rebind<Tp>::other
+			result_type;
+
+			return result_type(*this);
+		}
+
+	protected:
+		_rope_rep(_tag __t, uint8_t __d, bool __b, size_type __size,
+			  _Alloc const &__a)
+		: _M_size(__size), _M_tag(__t), _M_depth(__d),
+		  _M_is_balanced(__b ? 1 : 0), _Alloc(__a)
+		{}
+	};
+
+	struct _rope_leaf : public _rope_rep
+	{
+		static const enum _rope_rep::_tag _S_tag = _rope_rep::_S_leaf;
+		_CharT _M_data[];
+
+		_rope_leaf(size_type __n, _Alloc const &__a)
+		: _rope_rep(_S_tag, 0, true, __n, __a)
+		{}
+
+		void _M_destroy()
+		{
+			byte_alloc_type __ba(
+				this->template _M_get_alloc<char>()
+			);
+			byte_size_type __size(
+				sizeof(_rope_leaf)
+				+ sizeof(value_type)
+				  * _S_rounded_up_size(this->_M_size)
+			);
+
+			this->~_rope_leaf();
+			__ba.deallocate(reinterpret_cast<char *>(this), __size);
+		}
+
+		enum { _S_alloc_granularity = 8 };
+
+		static size_type _S_rounded_up_size(size_type __n)
+		{
+			// Allow slop for in-place expansion.
+			return (((__n + 1)
+				 + size_type(_S_alloc_granularity) - 1)
+				& ~(size_type(_S_alloc_granularity) - 1));
+		}
+
+		static rope_leaf_ptr _S_make(size_type __len,
+					     _Alloc const &__a)
+		{
+			byte_alloc_type __ba(__a);
+			byte_size_type __size(
+				sizeof(_rope_leaf)
+				+ sizeof(value_type) * _S_rounded_up_size(__len)
+			);
+
+			char *__place(__ba.allocate(__size));
+
+			__try {
+				return rope_leaf_ptr(
+					new (__place) _rope_leaf(__len, __a),
+					_rope_rep_deleter<_rope_leaf>(),
+					__a
+				);
+			} __catch(...) {
+				__ba.deallocate(__place, __size);
+				__throw_exception_again;
+			}
+		}
+
+		static rope_leaf_ptr _S_make(size_type __n, _CharT __c,
+					     _Alloc const &__a)
+		{
+			rope_leaf_ptr __result(_S_make(__n, __a));
+
+			traits_type::assign(__result->_M_data, __n, __c);
+			__result->_M_data[__n] = _CharT();
+
+			return __result;
+		}
+
+		static rope_leaf_ptr _S_make(_CharT const *__s, size_type __len,
+					     _Alloc const &__a)
+		{
+			rope_leaf_ptr __result(_S_make(__len, __a));
+
+			if (__len == 1)
+				traits_type::assign(*__result->_M_data, *__s);
+			else
+				traits_type::copy(__result->_M_data, __s,
+						  __len);
+
+			__result->_M_data[__len] = _CharT();
+
+			return __result;
+		}
+	};
+
+	struct _rope_concat : public _rope_rep
+	{
+		static const enum _rope_rep::_tag _S_tag = _rope_rep::_S_concat;
+		rope_rep_ptr _M_left;
+		rope_rep_ptr _M_right;
+
+		_rope_concat(rope_rep_ptr __l, rope_rep_ptr __r,
+			     _Alloc const &__a)
+		: _rope_rep(_S_tag, std::max(__l->_M_depth, __r->_M_depth) + 1,
+			    false, __l->_M_size + __r->_M_size, __a),
+		  _M_left(__l), _M_right(__r)
+		{}
+
+		static rope_concat_ptr _S_make(rope_rep_ptr __l,
+					       rope_rep_ptr __r,
+					       _Alloc const &__a)
+		{
+			return std::allocate_shared<_rope_concat>(
+				__a, __l, __r, __a
+			);
+		}
+
+		static rope_concat_ptr _S_make(rope_rep_ptr __l,
+					       rope_rep_ptr __r)
+		{
+			_Alloc const &__a(*__l.get());
+			return _S_make(__l, __r, __a);
+		}
+	};
+
+	struct _rope_substr : public _rope_rep
+	{
+		static const enum _rope_rep::_tag _S_tag = _rope_rep::_S_substr;
+		rope_rep_ptr _M_base;
+		size_type _M_begin;
+	};
+
+	struct _rope_func : public _rope_rep
+	{
+		static const enum _rope_rep::_tag _S_tag = _rope_rep::_S_func;
+		std::function<void (size_type, size_type, _CharT*)> _M_fn;
+	};
+
+	/**
+	 * @brief Definition of the balanced sub-tree.
+	 */
+	static bool _S_is_balanced(rope_rep_ptr __r)
+	{
+		return (__r->_M_size >= _S_min_len[__r->_M_depth]);
+	}
+
+	static rope_rep_ptr _S_concat_and_set_balanced(rope_rep_ptr __l,
+						       rope_rep_ptr __r)
+	{
+		rope_rep_ptr __result(_S_concat(__l, __r));
+
+		if (_S_is_balanced(__result))
+			__result->_M_is_balanced = true;
+
+		return __result;
+	}
+
+	/**
+	 * @brief Add __r to forest, assuming __r is already balanced.
+	 */
+	static void _S_add_leaf_to_forest(rope_rep_ptr __r,
+					  rope_rep_ptr *__forest);
+
+	/**
+	 * @brief Add all unbalanced subtrees to the forest of balanced trees.
+	 *
+	 * Used only by _S_balance.
+	 */
+	static void _S_add_to_forest(rope_rep_ptr __r, rope_rep_ptr *__forest);
+
+	/**
+	 * @brief The basic rebalancing operation.
+	 *
+	 * Logically copies the rope. The result is within height 2 of
+	 * balanced by the above definition.
+	 */
+	static rope_rep_ptr _S_balance(rope_rep_ptr __r);
+
+	/**
+	 * @brief General concatenation on rope_rep.
+	 */
+	static rope_rep_ptr _S_concat(rope_rep_ptr __l, rope_rep_ptr __r);
+
+	/**
+	 * @brief Concatenation of nonempty strings.
+	 *
+	 * Always builds a concatenation node.
+	 * Rebalances if the result is too deep.
+	 */
+	static rope_rep_ptr _S_tree_concat(rope_rep_ptr __l, rope_rep_ptr __r);
+
+	/**
+	 * @brief Concatenate by copying leaf.
+	 */
+	static rope_leaf_ptr _S_leaf_concat_char_iter(rope_leaf_ptr __r,
+						      _CharT const *__s,
+						      size_type __len);
+
+	/**
+	* @brief Concatenate rope and char ptr, copying __s.
+	*/
+	static rope_rep_ptr _S_concat_char_iter(rope_rep_ptr __r,
+						_CharT const *__s,
+						size_type __len);
+
+	/**
+	 * @brief Traverse tree, applying __f to matching character ranges.
+	 */
+	static bool _S_apply_to_pieces(
+		std::function<bool (_CharT const *, size_type)> __f,
+		rope_rep_ptr __r, size_type __begin,
+		size_type __end
+	);
+
+	template<typename _T, typename _Alloc1>
+	struct alloc_hider
+	: public _Alloc1
+	{
+		alloc_hider(_T const &__val)
+		: _Alloc1(), _M_v(__val)
+		{}
+
+		alloc_hider( _T const &__val, _Alloc1 const &__a)
+		: _Alloc1(__a), _M_v(__val)
+		{}
+
+		_T _M_v; // The actual data.
+        };
+
+	alloc_hider<rope_rep_ptr, allocator_type> _M_treeplus;
+
+private:
+	rope(rope_rep_ptr __t, _Alloc const &__a = _Alloc())
+	: _M_treeplus(__t, __a)
+	{}
+
+public:
+	bool empty() const
+	{
+		return !(_M_treeplus._M_v);
+	}
+
+	rope(_CharT const *__s, _Alloc const &__a = _Alloc())
+	: _M_treeplus(
+		__s ? _rope_leaf::_S_make(__s, traits_type::length(__s), __a)
+		    : rope_rep_ptr(),
+		__a
+	)
+	{}
+
+	rope(_CharT const *__s, size_type __len, _Alloc const &__a = _Alloc())
+	: _M_treeplus(
+		__s ? _rope_leaf::_S_make(__s, __len, __a) : rope_rep_ptr(),
+		__a
+	)
+	{}
+
+	rope(size_type __n, _CharT __c, _Alloc const &__a = _Alloc());
+
+	rope(_Alloc const &__a = _Alloc())
+	: _M_treeplus(rope_rep_ptr(), __a)
+	{}
+
+	size_type size() const
+	{
+		return _M_treeplus._M_v ? _M_treeplus._M_v->_M_size : 0;
+	}
+
+	rope &operator+=(rope const &__r)
+	{
+		return append(__r);
+	}
+
+	rope &append(rope const &__r)
+	{
+		rope_rep_ptr __result(_S_concat(_M_treeplus._M_v,
+						__r._M_treeplus._M_v));
+		_M_treeplus._M_v = __result;
+		return *this;
+	}
+
+	template<typename _CharT2, typename _Traits2, typename _Alloc2>
+	friend rope<_CharT2, _Traits2, _Alloc2> operator+(
+		rope<_CharT2, _Traits2, _Alloc2> const &__l,
+		rope<_CharT2, _Traits2, _Alloc2> const &__r
+	);
+
+	template<typename _CharT2, typename _Traits2, typename _Alloc2>
+	friend rope<_CharT2, _Traits2, _Alloc2> operator+(
+		rope<_CharT2, _Traits2, _Alloc2> const &__l,
+		_CharT2 const *__r
+	);
+
+	template<typename _CharT2, typename _Traits2, typename _Alloc2>
+	friend rope<_CharT2, _Traits2, _Alloc2> operator+(
+		rope<_CharT2, _Traits2, _Alloc2> const &__l,
+		_CharT2 __r
+	);
+
+	template<typename _CharT2, typename _Traits2, typename _Alloc2>
+	friend std::basic_ostream<_CharT2, _Traits2> &operator<<(
+		std::basic_ostream<_CharT2, _Traits2> &__os,
+		rope<_CharT2, _Traits2, _Alloc2> const &__r
+	);
+};
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+rope<_CharT, _Traits, _Alloc> operator+(
+	rope<_CharT, _Traits, _Alloc> const &__l,
+	rope<_CharT, _Traits, _Alloc> const &__r
+)
+{
+	typedef rope<_CharT, _Traits, _Alloc> rope_type;
+
+	return rope_type(
+		__l._S_concat(__l._M_treeplus._M_v, __r._M_treeplus._M_v),
+		__l._M_treeplus
+	);
+}
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+rope<_CharT, _Traits, _Alloc> operator+(
+	rope<_CharT, _Traits, _Alloc> const &__l,
+	_CharT const *__r
+)
+{
+	typedef rope<_CharT, _Traits, _Alloc> rope_type;
+	typedef typename rope_type::size_type size_type;
+
+	size_type __rlen(rope_type::traits_type::length(__r));
+
+	return rope_type(
+		__l._S_concat_char_iter(__l._M_treeplus._M_v, __r, __rlen),
+		__l._M_treeplus
+	);
+
+}
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+rope<_CharT, _Traits, _Alloc> operator+(
+	rope<_CharT, _Traits, _Alloc> const &__l,
+	_CharT __r
+)
+{
+	typedef rope<_CharT, _Traits, _Alloc> rope_type;
+
+	return rope_type(
+		__l._S_concat_char_iter(__l._M_treeplus._M_v, &__r, 1),
+		__l._M_treeplus
+	);
+}
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+std::basic_ostream<_CharT, _Traits> &operator<<(
+	std::basic_ostream<_CharT, _Traits> &__os,
+	rope<_CharT, _Traits, _Alloc> const &__r
+);
+
+typedef rope<char> crope;
+typedef rope<wchar_t> wrope;
+
+#ifndef _GLIBCXX_EXPORT_TEMPLATE
+#include <rope.tcc>
+#endif
+
+#endif
