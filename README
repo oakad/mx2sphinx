@@ -2,3 +2,6 @@ mx2sphinx
 =========
 
 Mx macros and documentation markup language preprocessor.
+
+Tested with g++-4.4 and boost-1.41, may depend on features not available
+in older versions of the aforementioned tools.
