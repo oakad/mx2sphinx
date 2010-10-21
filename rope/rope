@@ -140,13 +140,11 @@ rope<_CharT, _Traits, _Alloc> operator+(
 	_CharT __right
 );
 */
+
 template<typename _CharT, typename _Traits, typename _Alloc>
 struct rope
 {
 protected:
-	typedef typename _Alloc::template rebind<char>::other byte_alloc_type;
-	typedef typename byte_alloc_type::size_type byte_size_type;
-
 	typedef typename _Alloc::template rebind<_CharT>::other
 	_CharT_alloc_type;
 
@@ -181,42 +179,18 @@ protected:
 	typedef std::shared_ptr<_rope_substr> rope_substr_ptr;
 	typedef std::shared_ptr<_rope_func> rope_func_ptr;
 
-	template <typename Tp>
-	struct _rope_rep_deleter
-	{
-		void operator()(Tp *__p)
-		{
-			__p->_M_destroy();
-		}
-	};
-
 	/**
-	 * @brief Fake dynamic cast of _rope_rep pointers.
+	 * @brief _rope_rep implementation cast.
 	 */
 	template <typename Tp1, typename Tp2>
 	static std::shared_ptr<Tp1> _S_rep_cast(std::shared_ptr<Tp2> __p)
 	{
-		if (!Tp1::_S_tag || (Tp1::_S_tag == __p->_M_tag))
-			return std::static_pointer_cast<Tp1>(__p);
-		else
-			return std::shared_ptr<Tp1>();
+		return std::dynamic_pointer_cast<Tp1>(__p);
 	}
 
 	struct _rope_rep : public _Alloc
 	{
-		enum _tag : uint8_t
-		{
-			_S_rep = 0,
-			_S_leaf,
-			_S_concat,
-			_S_substr,
-			_S_func
-		};
-
-		static const enum _tag _S_tag = _S_rep;
-
 		size_type _M_size;
-		_tag _M_tag;
 		uint8_t _M_depth;
 		uint8_t _M_is_balanced;
 
@@ -229,38 +203,31 @@ protected:
 			return result_type(*this);
 		}
 
+		_Alloc _M_get_alloc()
+		{
+			return static_cast<_Alloc>(*this);
+		}
+
+		virtual ~_rope_rep()
+		{}
+
+		virtual bool _M_apply(
+			std::function<bool (_CharT const *, size_type)> __f,
+			size_type __begin, size_type __end
+		)
+		{
+			return false;
+		}
+
 	protected:
-		_rope_rep(_tag __t, uint8_t __d, bool __b, size_type __size,
-			  _Alloc const &__a)
-		: _M_size(__size), _M_tag(__t), _M_depth(__d),
+		_rope_rep(uint8_t __d, bool __b, size_type __size, _Alloc __a)
+		: _M_size(__size), _M_depth(__d),
 		  _M_is_balanced(__b ? 1 : 0), _Alloc(__a)
 		{}
 	};
 
 	struct _rope_leaf : public _rope_rep
 	{
-		static const enum _rope_rep::_tag _S_tag = _rope_rep::_S_leaf;
-		_CharT _M_data[];
-
-		_rope_leaf(size_type __n, _Alloc const &__a)
-		: _rope_rep(_S_tag, 0, true, __n, __a)
-		{}
-
-		void _M_destroy()
-		{
-			byte_alloc_type __ba(
-				this->template _M_get_alloc<char>()
-			);
-			byte_size_type __size(
-				sizeof(_rope_leaf)
-				+ sizeof(value_type)
-				  * _S_rounded_up_size(this->_M_size)
-			);
-
-			this->~_rope_leaf();
-			__ba.deallocate(reinterpret_cast<char *>(this), __size);
-		}
-
 		enum { _S_alloc_granularity = 8 };
 
 		static size_type _S_rounded_up_size(size_type __n)
@@ -271,27 +238,38 @@ protected:
 				& ~(size_type(_S_alloc_granularity) - 1));
 		}
 
+		_CharT *_M_data;
+
+		_rope_leaf(size_type __n, _Alloc const &__a)
+		: _rope_rep(0, true, __n, __a)
+		{
+			_CharT_alloc_type __ca(__a);
+			_M_data = __ca.allocate(
+				_S_rounded_up_size(this->_M_size)
+			);
+		}
+
+		virtual ~_rope_leaf()
+		{
+			_CharT_alloc_type __a(
+				this->template _M_get_alloc<_CharT_alloc_type>()
+			);
+
+			__a.deallocate(_M_data,
+				       _S_rounded_up_size(this->_M_size));
+		}
+
+		virtual bool _M_apply(
+			std::function<bool (_CharT const *, size_type)> __f,
+			size_type __begin, size_type __end
+		);
+
 		static rope_leaf_ptr _S_make(size_type __len,
 					     _Alloc const &__a)
 		{
-			byte_alloc_type __ba(__a);
-			byte_size_type __size(
-				sizeof(_rope_leaf)
-				+ sizeof(value_type) * _S_rounded_up_size(__len)
+			return std::allocate_shared<_rope_leaf>(
+				__a, __len, __a
 			);
-
-			char *__place(__ba.allocate(__size));
-
-			__try {
-				return rope_leaf_ptr(
-					new (__place) _rope_leaf(__len, __a),
-					_rope_rep_deleter<_rope_leaf>(),
-					__a
-				);
-			} __catch(...) {
-				__ba.deallocate(__place, __size);
-				__throw_exception_again;
-			}
 		}
 
 		static rope_leaf_ptr _S_make(size_type __n, _CharT __c,
@@ -324,20 +302,28 @@ protected:
 
 	struct _rope_concat : public _rope_rep
 	{
-		static const enum _rope_rep::_tag _S_tag = _rope_rep::_S_concat;
 		rope_rep_ptr _M_left;
 		rope_rep_ptr _M_right;
 
 		_rope_concat(rope_rep_ptr __l, rope_rep_ptr __r,
-			     _Alloc const &__a)
-		: _rope_rep(_S_tag, std::max(__l->_M_depth, __r->_M_depth) + 1,
-			    false, __l->_M_size + __r->_M_size, __a),
+			     _Alloc &&__a)
+		: _rope_rep(std::max(__l->_M_depth, __r->_M_depth) + 1,
+			    false, __l->_M_size + __r->_M_size,
+			    __a),
 		  _M_left(__l), _M_right(__r)
 		{}
 
+		virtual ~_rope_concat()
+		{}
+
+		virtual bool _M_apply(
+			std::function<bool (_CharT const *, size_type)> __f,
+			size_type __begin, size_type __end
+		);
+
 		static rope_concat_ptr _S_make(rope_rep_ptr __l,
 					       rope_rep_ptr __r,
-					       _Alloc const &__a)
+					       _Alloc &&__a)
 		{
 			return std::allocate_shared<_rope_concat>(
 				__a, __l, __r, __a
@@ -347,22 +333,35 @@ protected:
 		static rope_concat_ptr _S_make(rope_rep_ptr __l,
 					       rope_rep_ptr __r)
 		{
-			_Alloc const &__a(*__l.get());
-			return _S_make(__l, __r, __a);
+			return _S_make(__l, __r, __l->_M_get_alloc());
 		}
 	};
 
 	struct _rope_substr : public _rope_rep
 	{
-		static const enum _rope_rep::_tag _S_tag = _rope_rep::_S_substr;
 		rope_rep_ptr _M_base;
 		size_type _M_begin;
+
+		virtual ~_rope_substr()
+		{}
+
+		virtual bool _M_apply(
+			std::function<bool (_CharT const *, size_type)> __f,
+			size_type __begin, size_type __end
+		);
 	};
 
 	struct _rope_func : public _rope_rep
 	{
-		static const enum _rope_rep::_tag _S_tag = _rope_rep::_S_func;
 		std::function<void (size_type, size_type, _CharT*)> _M_fn;
+
+		virtual ~_rope_func()
+		{}
+
+		virtual bool _M_apply(
+			std::function<bool (_CharT const *, size_type)> __f,
+			size_type __begin, size_type __end
+		);
 	};
 
 	/**
@@ -439,19 +438,30 @@ protected:
 		std::function<bool (_CharT const *, size_type)> __f,
 		rope_rep_ptr __r, size_type __begin,
 		size_type __end
-	);
+	)
+	{
+		if (!__r)
+			return true;
+		else
+			__r->_M_apply(__f, __begin, __end);
+	}
 
 	template<typename _T, typename _Alloc1>
 	struct alloc_hider
 	: public _Alloc1
 	{
-		alloc_hider(_T const &__val)
+		alloc_hider(_T &&__val)
 		: _Alloc1(), _M_v(__val)
 		{}
 
-		alloc_hider( _T const &__val, _Alloc1 const &__a)
+		alloc_hider( _T &&__val, _Alloc1 &&__a)
 		: _Alloc1(__a), _M_v(__val)
 		{}
+
+		_Alloc1 _M_get_alloc() const
+		{
+			return static_cast<_Alloc1>(*this);
+		}
 
 		_T _M_v; // The actual data.
         };
@@ -459,7 +469,7 @@ protected:
 	alloc_hider<rope_rep_ptr, allocator_type> _M_treeplus;
 
 private:
-	rope(rope_rep_ptr __t, _Alloc const &__a = _Alloc())
+	rope(rope_rep_ptr __t, _Alloc &&__a = _Alloc())
 	: _M_treeplus(__t, __a)
 	{}
 
@@ -469,24 +479,26 @@ public:
 		return !(_M_treeplus._M_v);
 	}
 
-	rope(_CharT const *__s, _Alloc const &__a = _Alloc())
+	rope(_CharT const *__s, _Alloc &&__a = _Alloc())
 	: _M_treeplus(
-		__s ? _rope_leaf::_S_make(__s, traits_type::length(__s), __a)
+		__s ? _rope_leaf::_S_make(__s, traits_type::length(__s),
+					  std::forward(__a))
 		    : rope_rep_ptr(),
-		__a
+		std::forward(__a)
 	)
 	{}
 
-	rope(_CharT const *__s, size_type __len, _Alloc const &__a = _Alloc())
+	rope(_CharT const *__s, size_type __len, _Alloc &&__a = _Alloc())
 	: _M_treeplus(
-		__s ? _rope_leaf::_S_make(__s, __len, __a) : rope_rep_ptr(),
-		__a
+		__s ? _rope_leaf::_S_make(__s, __len, std::forward(__a))
+		    : rope_rep_ptr(),
+		std::forward(__a)
 	)
 	{}
 
-	rope(size_type __n, _CharT __c, _Alloc const &__a = _Alloc());
+	rope(size_type __n, _CharT __c, _Alloc &&__a = _Alloc());
 
-	rope(_Alloc const &__a = _Alloc())
+	rope(_Alloc &&__a = _Alloc())
 	: _M_treeplus(rope_rep_ptr(), __a)
 	{}
 
@@ -543,7 +555,7 @@ rope<_CharT, _Traits, _Alloc> operator+(
 
 	return rope_type(
 		__l._S_concat(__l._M_treeplus._M_v, __r._M_treeplus._M_v),
-		__l._M_treeplus
+		__l._M_treeplus._M_get_alloc()
 	);
 }
 
