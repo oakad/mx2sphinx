@@ -69,64 +69,17 @@ private:
 template<typename _Tp>
 struct ref_count : public counted_base
 {
-	template<typename... _Args>
-	static ref_count *_S_create(size_t __extra_size, _Args&&... __args)
-	{
-		if (!__extra_size)
-			return ::new ref_count(
-				0, std::forward<_Args>(__args)...
-			);
-		else {
-			void *__p(::operator new(
-				sizeof(this_type) + __extra_size
-			));
-
-			__try {
-				return ::new (__p) ref_count(
-					__extra_size,
-					std::forward<_Args>(__args)...
-				);
-			} __catch (...) {
-				::operator delete(__p);
-				__throw_exception_again;
-			}
-		}
-	}
-
-	static ref_count *_S_get_this(_Tp *__p)
-	{
-		return *reinterpret_cast<this_type **>(
-			reinterpret_cast<char *>(__p) - sizeof(this_type *)
-		);
-	}
-
 	virtual ~ref_count()
 	{}
-
-	virtual void _M_destroy()
-	{
-		if (!_M_extra_size)
-			::delete this;
-		else {
-			this->~this_type();
-			::operator delete(this);
-		}
-	}
 
 	virtual void *_M_get_allocator(std::type_info const &__ti)
 	{
 		return 0;
 	}
 
-	_Tp *_M_get_ptr()
-	{
-		return &_M_v;
-	}
+	virtual _Tp *_M_get_ptr() = 0;
 
-	_Tp const *_M_get_ptr() const
-	{
-		return &_M_v;
-	}
+	virtual _Tp const *_M_get_ptr() const = 0;
 
 	long _M_get_use_count() const
 	{
@@ -140,42 +93,248 @@ struct ref_count : public counted_base
 
 	virtual void *_M_get_extra()
 	{
-		return reinterpret_cast<char *>(this) + sizeof(this_type);
+		return 0;
 	}
 
 	virtual void const *_M_get_extra() const
 	{
-		return reinterpret_cast<const char *>(this) + sizeof(this_type);
+		return 0;
 	}
 
-protected:
-	typedef ref_count<_Tp> this_type;
+	virtual void *_M_get_extra(size_t &__sz)
+	{
+		__sz = 0;
+		return 0;
+	}
+
+	virtual void const *_M_get_extra(size_t &__sz) const
+	{
+		__sz = 0;
+		return 0;
+	}
+};
+
+template<typename _Tp>
+struct ref_count_val
+{
+	static ref_count<_Tp> *_S_get_this(_Tp *__p)
+	{
+		return *reinterpret_cast<ref_count<_Tp> **>(
+			reinterpret_cast<char *>(__p) - sizeof(ref_count<_Tp> *)
+		);
+	}
 
 	template<typename... _Args>
-	ref_count(size_t __extra_size, _Args&&... __args)
-	: _M_extra_size(__extra_size), _M_this(this),
-	  _M_v(std::forward<_Args>(__args)...)
+	ref_count_val(ref_count<_Tp> *__ref, _Args&&... __args)
+	: _M_ref(__ref), _M_v(std::forward<_Args>(__args)...)
 	{}
 
-	size_t        _M_extra_size;
-	this_type    *_M_this;
-	_Tp           _M_v;
+	_Tp *_M_get_ptr()
+	{
+		return &_M_v;
+	}
+
+	_Tp const *_M_get_ptr() const
+	{
+		return &_M_v;
+	}
+
+private:
+	ref_count<_Tp> *_M_ref;
+	_Tp             _M_v;
+};
+
+template<typename _Tp>
+struct ref_count_p : public ref_count<_Tp>
+{
+	template<typename... _Args>
+	static ref_count<_Tp> *_S_create(_Args&&... __args)
+	{
+		return ::new ref_count_p(std::forward<_Args>(__args)...);
+	}
+
+	virtual ~ref_count_p()
+	{}
+
+	virtual void _M_destroy()
+	{
+		::delete this;
+	}
+
+	virtual _Tp *_M_get_ptr()
+	{
+		return _M_val._M_get_ptr();
+	}
+
+	virtual _Tp const *_M_get_ptr() const
+	{
+		return _M_val._M_get_ptr();
+	}
+
+private:
+	template<typename... _Args>
+	ref_count_p(_Args&&... __args)
+	:_M_val(this, std::forward<_Args>(__args)...)
+	{}
+
+	ref_count_val<_Tp> _M_val;
+};
+
+template<typename _Tp>
+struct ref_count_e : public ref_count<_Tp>
+{
+	template<typename... _Args>
+	static ref_count<_Tp> *_S_create(size_t __extra_size, _Args&&... __args)
+	{
+		void *__p(::operator new(sizeof(ref_count_e<_Tp>)
+					 + __extra_size));
+
+		__try {
+			return ::new (__p) ref_count_e(
+				__extra_size, std::forward<_Args>(__args)...
+			);
+		} __catch (...) {
+			::operator delete(__p);
+			__throw_exception_again;
+		}
+	}
+
+	virtual ~ref_count_e()
+	{}
+
+	virtual void _M_destroy()
+	{
+		void *__p(this);
+		this->~ref_count_e<_Tp>();
+
+		::operator delete(__p,
+				  sizeof(ref_count_e<_Tp>) + _M_extra_size);
+	}
+
+	virtual _Tp *_M_get_ptr()
+	{
+		return _M_val._M_get_ptr();
+	}
+
+	virtual _Tp const *_M_get_ptr() const
+	{
+		return _M_val._M_get_ptr();
+	}
+
+	virtual void *_M_get_extra()
+	{
+		return _M_extra_storage;
+	}
+
+	virtual void const *_M_get_extra() const
+	{
+		return _M_extra_storage;
+	}
+
+	virtual void *_M_get_extra(size_t &__sz)
+	{
+		__sz = _M_extra_size;
+		return _M_extra_storage;
+	}
+
+	virtual void const *_M_get_extra(size_t &__sz) const
+	{
+		__sz = _M_extra_size;
+		return _M_extra_storage;
+	}
+
+private:
+	template<typename... _Args>
+	ref_count_e(size_t __extra_size, _Args&&... __args)
+	:_M_extra_size(__extra_size),
+	 _M_val(this, std::forward<_Args>(__args)...)
+	{}
+
+	size_t             _M_extra_size;
+	ref_count_val<_Tp> _M_val;
+	char               _M_extra_storage[];
 };
 
 template<typename _Tp, typename _Alloc>
-struct ref_count_a : public _Alloc, public ref_count<_Tp>
+struct ref_count_a : public ref_count<_Tp>
 {
 	template<typename... _Args>
-	static ref_count_a *_S_create(_Alloc __a, size_t __extra_size,
-				      _Args&&... __args)
+	static ref_count<_Tp> *_S_create(_Alloc __a, _Args&&... __args)
+	{
+		typename _Alloc::template rebind<this_type>::other __a2(__a);
+
+		ref_count_a *__p(__a2.allocate(1));
+
+		__try {
+			return ::new (__p) ref_count_a(
+				std::forward<_Alloc>(__a),
+				std::forward<_Args>(__args)...
+			);
+		} __catch(...) {
+			__a2.deallocate(__p, 1);
+			__throw_exception_again;
+		}
+
+		return __p;
+	}
+
+	virtual ~ref_count_a()
+	{}
+
+	virtual void _M_destroy()
+	{
+		typename _Alloc::template rebind<this_type>::other
+		__a(std::get<1>(_M_valplus));
+
+		__a.destroy(this);
+		__a.deallocate(this, 1);
+	}
+
+	virtual void *_M_get_allocator(std::type_info const &__ti)
+	{
+		if (__ti == typeid(_Alloc))
+			return &std::get<1>(_M_valplus);
+		else
+			return 0;
+	}
+
+	virtual _Tp *_M_get_ptr()
+	{
+		return std::get<0>(_M_valplus)._M_get_ptr();
+	}
+
+	virtual _Tp const *_M_get_ptr() const
+	{
+		return std::get<0>(_M_valplus)._M_get_ptr();
+	}
+
+private:
+	typedef ref_count_a<_Tp, _Alloc> this_type;
+
+	template<typename... _Args>
+	ref_count_a(_Alloc __a, _Args&&... __args)
+	:_M_valplus(ref_count_val<_Tp>(this, std::forward<_Args>(__args)...),
+		    std::forward<_Alloc>(__a))
+	{}
+
+	std::tuple<ref_count_val<_Tp>, _Alloc> _M_valplus;
+};
+
+template<typename _Tp, typename _Alloc>
+struct ref_count_a_e : public ref_count<_Tp>
+{
+	template<typename... _Args>
+	static ref_count<_Tp> *_S_create(_Alloc __a, size_t __extra_size,
+					 _Args&&... __args)
 	{
 		size_t __sz(sizeof(this_type) + __extra_size);
-		raw_bytes_alloc __raw(__a);
+		typename _Alloc::template rebind<char>::other
+		__raw(__a);
 
 		void *__p(__raw.allocate(__sz));
 
 		__try {
-			return ::new (__p) ref_count_a(
+			return ::new (__p) ref_count_a_e(
 				std::forward<_Alloc>(__a), __extra_size,
 				std::forward<_Args>(__args)...
 			);
@@ -185,42 +344,71 @@ struct ref_count_a : public _Alloc, public ref_count<_Tp>
 		}
 	}
 
-	virtual ~ref_count_a()
+	virtual ~ref_count_a_e()
 	{}
 
 	virtual void _M_destroy()
 	{
-		size_t __sz(sizeof(this_type) + this->_M_extra_size);
-		raw_bytes_alloc __raw(*this);
+		size_t __sz(sizeof(this_type) + std::get<0>(_M_alloc));
+		typename _Alloc::template rebind<char>::other
+		__raw(std::get<1>(_M_alloc));
 
-		this->~ref_count_a();
+		this->~ref_count_a_e();
 		__raw.deallocate(reinterpret_cast<char *>(this), __sz);
 	}
 
 	virtual void *_M_get_allocator(std::type_info const &__ti)
 	{
-		return __ti == typeid(_Alloc) ? static_cast<_Alloc *>(this) : 0;
+		if (__ti == typeid(_Alloc))
+			 return &std::get<1>(_M_alloc);
+		else
+			return 0;
+	}
+
+	virtual _Tp *_M_get_ptr()
+	{
+		return _M_val._M_get_ptr();
+	}
+
+	virtual _Tp const *_M_get_ptr() const
+	{
+		return _M_val._M_get_ptr();
 	}
 
 	virtual void *_M_get_extra()
 	{
-		return reinterpret_cast<char *>(this) + sizeof(this_type);
+		return _M_extra_storage;
 	}
 
 	virtual void const *_M_get_extra() const
 	{
-		return reinterpret_cast<const char *>(this) + sizeof(this_type);
+		return _M_extra_storage;
 	}
 
-protected:
-	typedef ref_count_a<_Tp, _Alloc> this_type;
-	typedef typename _Alloc::template rebind<char>::other raw_bytes_alloc;
+	virtual void *_M_get_extra(size_t &__sz)
+	{
+		__sz = std::get<0>(_M_alloc);
+		return _M_extra_storage;
+	}
+
+	virtual void const *_M_get_extra(size_t &__sz) const
+	{
+		__sz = std::get<0>(_M_alloc);
+		return _M_extra_storage;
+	}
+
+private:
+	typedef ref_count_a_e<_Tp, _Alloc> this_type;
 
 	template<typename... _Args>
-	ref_count_a(_Alloc __a, size_t __extra_size, _Args&&... __args)
-	: ref_count<_Tp>(__extra_size, std::forward<_Args>(__args)...),
-	  _Alloc(__a)
+	ref_count_a_e(_Alloc __a, size_t __extra_size, _Args&&... __args)
+	: _M_alloc(__extra_size, std::forward<_Alloc>(__a)),
+	  _M_val(this, std::forward<_Args>(__args)...)
 	{}
+
+	std::tuple<size_t, _Alloc> _M_alloc;
+	ref_count_val<_Tp>         _M_val;
+	char                       _M_extra_storage[];
 };
 
 };
@@ -242,7 +430,7 @@ struct counted_ptr
 		using namespace __counted;
 
 		if (_M_ptr)
-			ref_count<_Tp>::_S_get_this(_M_ptr)->_M_release();
+			ref_count_val<_Tp>::_S_get_this(_M_ptr)->_M_release();
 	}
 
 	/** @brief Construct an empty %counted_ptr.
@@ -266,7 +454,8 @@ struct counted_ptr
 		__glibcxx_function_requires(_ConvertibleConcept<_Tp1*, _Tp*>);
 
 		if (_M_ptr)
-			ref_count<_Tp>::_S_get_this(_M_ptr)->_M_add_ref_copy();
+			ref_count_val<_Tp>::_S_get_this(_M_ptr)
+					    ->_M_add_ref_copy();
 	}
 
 	/** @brief  Move-constructs a %counted_ptr instance from @a __r.
@@ -302,12 +491,12 @@ struct counted_ptr
 
 		if (__r._M_ptr != _M_ptr) {
 			if (__r._M_ptr != 0)
-				ref_count<_Tp1>::_S_get_this(__r._M_ptr)
-						 ->_M_add_ref_copy();
+				ref_count_val<_Tp1>::_S_get_this(__r._M_ptr)
+						     ->_M_add_ref_copy();
 
 			if (_M_ptr != 0)
-				ref_count<_Tp>::_S_get_this(_M_ptr)
-						->_M_release();
+				ref_count_val<_Tp>::_S_get_this(_M_ptr)
+						    ->_M_release();
 
 			_M_ptr = __r._M_ptr;
 		}
@@ -364,6 +553,7 @@ struct counted_ptr
 
 	/** @brief Return pointer to undescriminated "extra" byte storage
 	 *         managed by *this.
+	 *  @return Pointer tp extra storage casted to the desired type.
 	 */
 	template<typename _Tp1>
 	_Tp1 *get_extra()
@@ -372,8 +562,27 @@ struct counted_ptr
 
 		if (_M_ptr != 0)
 			return static_cast<_Tp1 *>(
-				ref_count<_Tp>::_S_get_this(_M_ptr)
-						->_M_get_extra()
+				ref_count_val<_Tp>::_S_get_this(_M_ptr)
+						    ->_M_get_extra()
+			);
+		else
+			return 0;
+	}
+
+	/** @brief Return pointer to undescriminated "extra" byte storage
+	 *         managed by *this, together with its stored size.
+	 *  @param  __size reference to callers size variable
+	 *  @return Pointer tp extra storage casted to the desired type.
+	 */
+	template<typename _Tp1>
+	_Tp1 *get_extra(size_t &__size)
+	{
+		using namespace __counted;
+
+		if (_M_ptr != 0)
+			return static_cast<_Tp1 *>(
+				ref_count_val<_Tp>::_S_get_this(_M_ptr)
+						    ->_M_get_extra(__size)
 			);
 		else
 			return 0;
@@ -394,8 +603,8 @@ public:
 		using namespace __counted;
 
 		return _M_ptr == 0 ? 0
-				   : ref_count<_Tp>::_S_get_this(_M_ptr)
-						     ->_M_unique();
+				   : ref_count_val<_Tp>::_S_get_this(_M_ptr)
+							 ->_M_unique();
 	}
 
 	long use_count() const
@@ -403,8 +612,8 @@ public:
 		using namespace __counted;
 
 		return _M_ptr == 0 ? 0
-				   : ref_count<_Tp>::_S_get_this(_M_ptr)
-						     ->_M_get_use_count();
+				   : ref_count_val<_Tp>::_S_get_this(_M_ptr)
+							 ->_M_get_use_count();
 	}
 
 	void swap(counted_ptr<_Tp> &&__other)
@@ -431,10 +640,13 @@ public:
 	{
 		using namespace __counted;
 
-		return counted_ptr<_Tp1>(ref_count_a<_Tp1, _Alloc>::_S_create(
-			std::forward<_Alloc>(__a), __extra_size._M_size,
-			std::forward<_Args>(__args)...
-		));
+		return counted_ptr<_Tp1>(
+			ref_count_a_e<_Tp1, _Alloc>::_S_create(
+				std::forward<_Alloc>(__a),
+				__extra_size._M_size,
+				std::forward<_Args>(__args)...
+			)
+		);
 	}
 
 	/** @brief  Create an object that is owned by a counted_ptr.
@@ -452,10 +664,12 @@ public:
 	{
 		using namespace __counted;
 
-		return counted_ptr<_Tp1>(ref_count_a<_Tp1, _Alloc>::_S_create(
-			std::forward<_Alloc>(__a), 0,
-			std::forward<_Args>(__args)...
-		));
+		return counted_ptr<_Tp1>(
+			ref_count_a<_Tp1, _Alloc>::_S_create(
+				std::forward<_Alloc>(__a),
+				std::forward<_Args>(__args)...
+			)
+		);
 	}
 
 	/** @brief  Create an object that is owned by a counted_ptr.
@@ -472,9 +686,12 @@ public:
 	{
 		using namespace __counted;
 
-		return counted_ptr<_Tp1>(ref_count<_Tp1>::_S_create(
-			__extra_size._M_size, std::forward<_Args>(__args)...
-		));
+		return counted_ptr<_Tp1>(
+			ref_count_e<_Tp1>::_S_create(
+				__extra_size._M_size,
+				std::forward<_Args>(__args)...
+			)
+		);
 	}
 
 	/** @brief  Create an object that is owned by a counted_ptr.
@@ -488,9 +705,11 @@ public:
 	{
 		using namespace __counted;
 
-		return counted_ptr<_Tp1>(ref_count<_Tp1>::_S_create(
-			0, std::forward<_Args>(__args)...
-		));
+		return counted_ptr<_Tp1>(
+			ref_count_p<_Tp1>::_S_create(
+				0, std::forward<_Args>(__args)...
+			)
+		);
 	}
 
 	template<typename _Tp1>
@@ -500,7 +719,7 @@ public:
 	{
 		if (__p._M_ptr != 0)
 			return counted_ptr<_Tp1>(
-				__counted::ref_count<_Tp1>::_S_get_this(
+				__counted::ref_count_val<_Tp1>::_S_get_this(
 					static_cast<_Tp1 *>(__p._M_ptr)
 				)
 			);
@@ -515,7 +734,7 @@ public:
 	{
 		if (__p._M_ptr != 0)
 			return counted_ptr<_Tp1>(
-				__counted::ref_count<_Tp1>::_S_get_this(
+				__counted::ref_count_val<_Tp1>::_S_get_this(
 					const_cast<_Tp1 *>(__p._M_ptr)
 				)
 			);
@@ -557,8 +776,8 @@ private:
 		using namespace __counted;
 
 		if (_M_ptr != 0)
-			return ref_count<_Tp>::_S_get_this(_M_ptr)
-					       ->_M_get_allocator(__ti);
+			return ref_count_val<_Tp>::_S_get_this(_M_ptr)
+						   ->_M_get_allocator(__ti);
 		else
 			return 0;
 	}
