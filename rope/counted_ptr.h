@@ -274,8 +274,6 @@ struct ref_count_a : public ref_count<_Tp>
 			__a2.deallocate(__p, 1);
 			__throw_exception_again;
 		}
-
-		return __p;
 	}
 
 	virtual ~ref_count_a()
@@ -414,6 +412,40 @@ private:
 };
 
 template<typename _Tp>
+struct counted_ptr;
+
+template<typename _Tp, typename _Alloc, typename... _Args>
+counted_ptr<_Tp> allocate_counted(
+	_Alloc __a,
+	typename counted_ptr<_Tp>::extra_size __extra_size,
+	_Args&&... __args
+);
+
+template<typename _Tp, typename _Alloc, typename... _Args>
+counted_ptr<_Tp> allocate_counted(_Alloc __a, _Args&&... __args);
+
+template<typename _Tp, typename... _Args>
+counted_ptr<_Tp> make_counted(
+	typename counted_ptr<_Tp>::extra_size __extra_size,
+	_Args&&... __args
+);
+
+template<typename _Tp, typename... _Args>
+counted_ptr<_Tp> make_counted(_Args&&... __args);
+
+template<typename _Tp1, typename _Tp2>
+counted_ptr<_Tp1> static_pointer_cast(counted_ptr<_Tp2> __p);
+
+template<typename _Tp1, typename _Tp2>
+counted_ptr<_Tp1> const_pointer_cast(counted_ptr<_Tp2> __p);
+
+template<typename _Tp1, typename _Tp2>
+counted_ptr<_Tp1> dynamic_pointer_cast(counted_ptr<_Tp2> __p);
+
+template<typename _Alloc, typename _Tp>
+_Alloc *get_allocator(counted_ptr<_Tp> __p);
+
+template<typename _Tp>
 struct counted_ptr
 {
 	struct extra_size
@@ -439,6 +471,22 @@ struct counted_ptr
 	counted_ptr()
 	: _M_ptr(0)
 	{}
+
+	/** @brief  If @a __r is empty, constructs an empty %counted_ptr;
+	 *          otherwise construct a %counted_ptr that shares ownership
+	 *          with @a __r.
+	 *  @param  __r  A %counted_ptr.
+	 *  @post   get() == __r.get() && use_count() == __r.use_count()
+	 */
+	counted_ptr(counted_ptr const &__r)
+	: _M_ptr(__r._M_ptr)
+	{
+		using namespace __counted;
+
+		if (_M_ptr)
+			ref_count_val<_Tp>::_S_get_this(_M_ptr)
+					    ->_M_add_ref_copy();
+	}
 
 	/** @brief  If @a __r is empty, constructs an empty %counted_ptr;
 	 *          otherwise construct a %counted_ptr that shares ownership
@@ -484,10 +532,34 @@ struct counted_ptr
 	 *  @param __r A %counted_ptr.
 	 *  @post  get() == __r.get() && use_count() == __r.use_count()
 	 */
+	counted_ptr &operator=(counted_ptr const &__r)
+	{
+		using namespace __counted;
+
+		if (__r._M_ptr != _M_ptr) {
+			if (__r._M_ptr != 0)
+				ref_count_val<_Tp>::_S_get_this(__r._M_ptr)
+						    ->_M_add_ref_copy();
+
+			if (_M_ptr != 0)
+				ref_count_val<_Tp>::_S_get_this(_M_ptr)
+						    ->_M_release();
+
+			_M_ptr = __r._M_ptr;
+		}
+
+		return *this;
+	}
+
+	/** @brief Assign @a __r to *this.
+	 *  @param __r A %counted_ptr.
+	 *  @post  get() == __r.get() && use_count() == __r.use_count()
+	 */
 	template<typename _Tp1>
 	counted_ptr &operator=(counted_ptr<_Tp1> const &__r)
 	{
 		using namespace __counted;
+		__glibcxx_function_requires(_ConvertibleConcept<_Tp1*, _Tp*>);
 
 		if (__r._M_ptr != _M_ptr) {
 			if (__r._M_ptr != 0)
@@ -549,6 +621,16 @@ struct counted_ptr
 	_Tp *get() const
 	{
 		return _M_ptr;
+	}
+
+	__counted::ref_count<_Tp> const *get_this() const
+	{
+		using namespace __counted;
+
+		if (_M_ptr)
+			return ref_count_val<_Tp>::_S_get_this(_M_ptr);
+		else
+			return 0;
 	}
 
 	/** @brief Return pointer to undescriminated "extra" byte storage
@@ -621,140 +703,38 @@ public:
 		std::swap(_M_ptr, __other._M_ptr);
 	}
 
-	/** @brief  Create an object that is owned by a counted_ptr.
-	 *  @param  __a          An allocator.
-	 *  @param  __extra_size Additional non discriminated storage size,
-	 *                       adjanced to newly created object.
-	 *  @param  __args       Arguments for the @a _Tp object's constructor.
-	 *  @return A shared_ptr that owns the newly created object.
-	 *  @throw  An exception thrown from @a _Alloc::allocate or from the
-	 *          constructor of @a _Tp.
-	 *
-	 *  A copy of @a __a will be used to allocate memory for the counted_ptr
-	 *  and the new object.
-	 */
 	template<typename _Tp1, typename _Alloc, typename... _Args>
-	friend counted_ptr<_Tp1> allocate_counted(_Alloc __a,
-						  extra_size __extra_size,
-						  _Args&&... __args)
-	{
-		using namespace __counted;
+	friend counted_ptr<_Tp1> allocate_counted(
+		_Alloc __a,
+		typename counted_ptr<_Tp1>::extra_size __extra_size,
+		_Args&&... __args
+	);
 
-		return counted_ptr<_Tp1>(
-			ref_count_a_e<_Tp1, _Alloc>::_S_create(
-				std::forward<_Alloc>(__a),
-				__extra_size._M_size,
-				std::forward<_Args>(__args)...
-			)
-		);
-	}
-
-	/** @brief  Create an object that is owned by a counted_ptr.
-	 *  @param  __a    An allocator.
-	 *  @param  __args Arguments for the @a _Tp object's constructor.
-	 *  @return A shared_ptr that owns the newly created object.
-	 *  @throw  An exception thrown from @a _Alloc::allocate or from the
-	 *          constructor of @a _Tp.
-	 *
-	 *  A copy of @a __a will be used to allocate memory for the counted_ptr
-	 *  and the new object.
-	 */
 	template<typename _Tp1, typename _Alloc, typename... _Args>
-	friend counted_ptr allocate_counted(_Alloc __a, _Args&&... __args)
-	{
-		using namespace __counted;
+	friend counted_ptr<_Tp1> allocate_counted(
+		_Alloc __a, _Args&&... __args
+	);
 
-		return counted_ptr<_Tp1>(
-			ref_count_a<_Tp1, _Alloc>::_S_create(
-				std::forward<_Alloc>(__a),
-				std::forward<_Args>(__args)...
-			)
-		);
-	}
-
-	/** @brief  Create an object that is owned by a counted_ptr.
-	 *  @param  __extra_size Additional non discriminated storage size,
-	 *                       adjanced to newly created object.
-	 *  @param  __args       Arguments for the @a _Tp object's constructor.
-	 *  @return A counted_ptr that owns the newly created object.
-	 *  @throw  std::bad_alloc, or an exception thrown from the
-	 *          constructor of @a _Tp.
-	 */
 	template<typename _Tp1, typename... _Args>
-	friend counted_ptr make_counted(extra_size __extra_size,
-					_Args&&... __args)
-	{
-		using namespace __counted;
+	friend counted_ptr<_Tp1> make_counted(
+		typename counted_ptr<_Tp1>::extra_size __extra_size,
+		_Args&&... __args
+	);
 
-		return counted_ptr<_Tp1>(
-			ref_count_e<_Tp1>::_S_create(
-				__extra_size._M_size,
-				std::forward<_Args>(__args)...
-			)
-		);
-	}
-
-	/** @brief  Create an object that is owned by a counted_ptr.
-	 *  @param  __args  Arguments for the @a _Tp object's constructor.
-	 *  @return A counted_ptr that owns the newly created object.
-	 *  @throw  std::bad_alloc, or an exception thrown from the
-	 *          constructor of @a _Tp.
-	 */
 	template<typename _Tp1, typename... _Args>
-	friend counted_ptr make_counted(_Args&&... __args)
-	{
-		using namespace __counted;
+	friend counted_ptr<_Tp1> make_counted(_Args&&... __args);
 
-		return counted_ptr<_Tp1>(
-			ref_count_p<_Tp1>::_S_create(
-				0, std::forward<_Args>(__args)...
-			)
-		);
-	}
+	template<typename _Tp1, typename _Tp2>
+	friend counted_ptr<_Tp1> static_pointer_cast(counted_ptr<_Tp2> __p);
 
-	template<typename _Tp1>
-	friend counted_ptr<_Tp1> static_pointer_cast(
-		counted_ptr<_Tp> const &__p
-	)
-	{
-		if (__p._M_ptr != 0)
-			return counted_ptr<_Tp1>(
-				__counted::ref_count_val<_Tp1>::_S_get_this(
-					static_cast<_Tp1 *>(__p._M_ptr)
-				)
-			);
-		else
-			return counted_ptr<_Tp1>();
-	}
+	template<typename _Tp1, typename _Tp2>
+	friend counted_ptr<_Tp1> const_pointer_cast(counted_ptr<_Tp2> __p);
 
-	template<typename _Tp1>
-	friend counted_ptr<_Tp1> const_pointer_cast(
-		counted_ptr<_Tp> const &__p
-	)
-	{
-		if (__p._M_ptr != 0)
-			return counted_ptr<_Tp1>(
-				__counted::ref_count_val<_Tp1>::_S_get_this(
-					const_cast<_Tp1 *>(__p._M_ptr)
-				)
-			);
-		else
-			return counted_ptr<_Tp1>();
-	}
-
-	template<typename _Tp1>
-	friend counted_ptr<_Tp1> dynamic_pointer_cast(
-		counted_ptr<_Tp> const &__p
-	)
-	{
-		if (dynamic_cast<_Tp1 *>(__p._M_ptr) != 0)
-			return static_pointer_cast(__p);
-		else
-			return counted_ptr<_Tp1>();
-	}
+	template<typename _Tp1, typename _Tp2>
+	friend counted_ptr<_Tp1> dynamic_pointer_cast(counted_ptr<_Tp2> __p);
 
 	template<typename _Alloc>
-	friend _Alloc *get_allocator(counted_ptr<_Tp> const &__p)
+	friend _Alloc *get_allocator(counted_ptr<_Tp> __p)
 	{
 		return static_cast<_Alloc *>(
 			__p._M_get_allocator(typeid(_Alloc))
@@ -764,12 +744,21 @@ public:
 private:
 	template<typename _Tp1> friend class counted_ptr;
 
-	/** @brief Constructs a %counted_ptr from existing %ref_count; used by
-	 *         make_counted and allocate_counted.
+	/** @brief Constructs a %counted_ptr from existing %ref_count.
+	 *         Private constructor for use by helper functions,
+	 *         make_counted and allocate_counted, as well as pointer casts.
 	 */
-	explicit counted_ptr(__counted::ref_count<_Tp> *__r)
+	explicit counted_ptr(__counted::ref_count<_Tp> *__r,
+			     bool __increment = false)
 	: _M_ptr(__r->_M_get_ptr())
-	{}
+	{
+		using namespace __counted;
+
+		if (__increment && (_M_ptr != 0)) {
+			ref_count_val<_Tp>::_S_get_this(_M_ptr)
+					    ->_M_add_ref_copy();
+		}
+	}
 
 	void *_M_get_allocator(std::type_info const &__ti) const
 	{
@@ -784,5 +773,137 @@ private:
 
 	_Tp *_M_ptr;
 };
+
+/** @brief  Create an object that is owned by a counted_ptr.
+ *  @param  __a          An allocator.
+ *  @param  __extra_size Additional non discriminated storage size,
+ *                       adjanced to newly created object.
+ *  @param  __args       Arguments for the @a _Tp object's constructor.
+ *  @return A shared_ptr that owns the newly created object.
+ *  @throw  An exception thrown from @a _Alloc::allocate or from the
+ *          constructor of @a _Tp.
+ *
+ *  A copy of @a __a will be used to allocate memory for the counted_ptr
+ *  and the new object.
+ */
+template<typename _Tp, typename _Alloc, typename... _Args>
+counted_ptr<_Tp> allocate_counted(
+	_Alloc __a,
+	typename counted_ptr<_Tp>::extra_size __extra_size,
+	_Args&&... __args
+)
+{
+	using namespace __counted;
+
+	return counted_ptr<_Tp>(
+		ref_count_a_e<_Tp, _Alloc>::_S_create(
+			std::forward<_Alloc>(__a),
+			__extra_size._M_size,
+			std::forward<_Args>(__args)...
+		)
+	);
+}
+
+/** @brief  Create an object that is owned by a counted_ptr.
+ *  @param  __a    An allocator.
+ *  @param  __args Arguments for the @a _Tp object's constructor.
+ *  @return A shared_ptr that owns the newly created object.
+ *  @throw  An exception thrown from @a _Alloc::allocate or from the
+ *          constructor of @a _Tp.
+ *
+ *  A copy of @a __a will be used to allocate memory for the counted_ptr
+ *  and the new object.
+ */
+template<typename _Tp, typename _Alloc, typename... _Args>
+counted_ptr<_Tp> allocate_counted(_Alloc __a, _Args&&... __args)
+{
+	using namespace __counted;
+
+	return counted_ptr<_Tp>(
+		ref_count_a<_Tp, _Alloc>::_S_create(
+			std::forward<_Alloc>(__a),
+			std::forward<_Args>(__args)...
+		)
+	);
+}
+
+/** @brief  Create an object that is owned by a counted_ptr.
+ *  @param  __extra_size Additional non discriminated storage size,
+ *                       adjanced to newly created object.
+ *  @param  __args       Arguments for the @a _Tp object's constructor.
+ *  @return A counted_ptr that owns the newly created object.
+ *  @throw  std::bad_alloc, or an exception thrown from the
+ *          constructor of @a _Tp.
+ */
+template<typename _Tp, typename... _Args>
+counted_ptr<_Tp> make_counted(
+	typename counted_ptr<_Tp>::extra_size __extra_size,
+	_Args&&... __args
+)
+{
+	using namespace __counted;
+
+	return counted_ptr<_Tp>(
+		ref_count_e<_Tp>::_S_create(
+			__extra_size._M_size,
+			std::forward<_Args>(__args)...
+		)
+	);
+}
+
+/** @brief  Create an object that is owned by a counted_ptr.
+ *  @param  __args  Arguments for the @a _Tp object's constructor.
+ *  @return A counted_ptr that owns the newly created object.
+ *  @throw  std::bad_alloc, or an exception thrown from the
+ *          constructor of @a _Tp.
+ */
+template<typename _Tp, typename... _Args>
+counted_ptr<_Tp> make_counted(_Args&&... __args)
+{
+	using namespace __counted;
+
+	return counted_ptr<_Tp>(
+		ref_count_p<_Tp>::_S_create(
+			0, std::forward<_Args>(__args)...
+		)
+	);
+}
+
+template<typename _Tp1, typename _Tp2>
+counted_ptr<_Tp1> static_pointer_cast(counted_ptr<_Tp2> __p)
+{
+	if (__p._M_ptr != 0)
+		return counted_ptr<_Tp1>(
+			__counted::ref_count_val<_Tp1>::_S_get_this(
+				static_cast<_Tp1 *>(__p._M_ptr)
+			),
+			true
+		);
+	else
+		return counted_ptr<_Tp1>();
+}
+
+template<typename _Tp1, typename _Tp2>
+counted_ptr<_Tp1> const_pointer_cast(counted_ptr<_Tp2> __p)
+{
+	if (__p._M_ptr != 0)
+		return counted_ptr<_Tp1>(
+			__counted::ref_count_val<_Tp1>::_S_get_this(
+				const_cast<_Tp1 *>(__p._M_ptr)
+			),
+			true
+		);
+	else
+		return counted_ptr<_Tp1>();
+}
+
+template<typename _Tp1, typename _Tp2>
+counted_ptr<_Tp1> dynamic_pointer_cast(counted_ptr<_Tp2> __p)
+{
+	if (dynamic_cast<_Tp1 *>(__p._M_ptr) != 0)
+		return static_pointer_cast(__p);
+	else
+		return counted_ptr<_Tp1>();
+}
 
 #endif

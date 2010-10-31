@@ -139,7 +139,7 @@ rope<_CharT, _Traits, _Alloc>::_S_balance(
 		}
 
 	if (__result->_M_depth > _S_max_rope_depth)
-		std::__throw_length_error(__N("rope::_M_balance"));
+		std::__throw_length_error(__N("rope::_S_balance"));
 
 	return __result;
 }
@@ -225,11 +225,13 @@ rope<_CharT, _Traits, _Alloc>::_S_leaf_concat_char_iter(
 	size_type __old_len(__r->_M_size);
 	size_type __new_len(__old_len + __len);
 
-	rope_leaf_ptr __result(_rope_leaf::_S_make(__new_len, *__r.get()));
+	rope_leaf_ptr __result(
+		_rope_leaf::_S_make(__new_len, *get_allocator<_Alloc>(__r))
+	);
 
-	traits_type::copy(__result->_M_data, __r->_M_data, __old_len);
-	traits_type::copy(__result->_M_data + __old_len, __iter, __len);
-	__result->_M_data[__new_len] = _CharT();
+	traits_type::copy(&__result->_M_data[0], __r->_M_data, __old_len);
+	traits_type::copy(&__result->_M_data[__old_len], __iter, __len);
+	traits_type::assign(__result->_M_data[__new_len], _CharT());
 
 	return __result;
 }
@@ -279,7 +281,7 @@ bool rope<_CharT, _Traits, _Alloc>::_rope_substr::_M_apply(
 	typename rope<_CharT, _Traits, _Alloc>::size_type __end
 )
 {
-	return _M_base->_M_apply(__f, __begin + _M_begin,
+	return _M_base->_M_apply(__f, __begin + _M_start,
 				 std::min(this->_M_size, __end));
 }
 
@@ -315,6 +317,8 @@ rope<_CharT, _Traits, _Alloc>::rope(size_type __n, _CharT __c,
 				    _Alloc &&__a)
 : _M_treeplus(rope_rep_ptr(), __a)
 {
+	typedef rope<_CharT, _Traits, _Alloc> rope_type;
+
 	size_type const __exponentiate_threshold(32);
 
 	if (__n == 0)
@@ -327,15 +331,14 @@ rope<_CharT, _Traits, _Alloc>::rope(size_type __n, _CharT __c,
 	if (__rest != 0)
 		__remainder = _rope_leaf::_S_make(__rest, __c, __a);
 
-	rope<_CharT, _Traits, _Alloc> __remainder_rope(__remainder, __a);
-	rope<_CharT, _Traits, _Alloc> __result(__a);
+	rope_type __remainder_rope(__remainder, __a), __result(__a);
 
 	if (__exponent != 0) {
 		rope_leaf_ptr __base_leaf(_rope_leaf::_S_make(
 			__exponentiate_threshold, __c, __a
 		));
 
-		rope<_CharT, _Traits, _Alloc> __base_rope(__base_leaf, __a);
+		rope_type __base_rope(__base_leaf, __a);
 
 		__result = __base_rope;
 
@@ -364,7 +367,7 @@ rope<_CharT, _Traits, _Alloc>::rope(size_type __n, _CharT __c,
 	} else
 		__result = __remainder_rope;
 
-	this->_M_treeplus._M_v = __result._M_treeplus._M_v;
+	std::get<0>(this->_M_treeplus) = std::get<0>(__result._M_treeplus);
 }
 
 template<typename _InputIterator, typename _Size, typename _OutputIterator>
@@ -400,7 +403,7 @@ std::basic_ostream<_CharT, _Traits> &operator<<(
 			std::placeholders::_1,
 			std::placeholders::_2,
 			__out_iter),
-		__r._M_treeplus._M_v, 0, __rope_len
+		std::get<0>(__r._M_treeplus), 0, __rope_len
 	);
 
 	if (__left && __pad_len > 0)
