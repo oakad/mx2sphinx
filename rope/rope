@@ -215,17 +215,6 @@ protected:
 		uint8_t   _M_is_balanced;
 		size_type _M_size;
 
-		virtual ~_rope_rep()
-		{}
-
-		virtual bool _M_apply(
-			std::function<bool (_CharT const *, size_type)> __f,
-			size_type __begin, size_type __end
-		)
-		{
-			return false;
-		}
-
 	protected:
 		_rope_rep(_rope_tag __tag, uint8_t __d, bool __b,
 			  size_type __size)
@@ -272,15 +261,6 @@ protected:
 
 			traits_type::assign(_M_data[__len], _CharT());
 		}
-
-		virtual ~_rope_leaf()
-		{
-		}
-
-		virtual bool _M_apply(
-			std::function<bool (_CharT const *, size_type)> __f,
-			size_type __begin, size_type __end
-		);
 
 		static rope_leaf_ptr _S_make(size_type __len,
 					     _Alloc &&__a)
@@ -335,14 +315,6 @@ protected:
 		 _M_left(__l), _M_right(__r)
 		{}
 
-		virtual ~_rope_concat()
-		{}
-
-		virtual bool _M_apply(
-			std::function<bool (_CharT const *, size_type)> __f,
-			size_type __begin, size_type __end
-		);
-
 		static rope_concat_ptr _S_make(rope_rep_ptr __l,
 					       rope_rep_ptr __r,
 					       _Alloc &&__a)
@@ -371,14 +343,6 @@ protected:
 		: _rope_rep(_S_ref_tag, 0, true, __len), _M_base(__base),
 		  _M_start(__start)
 		{}
-
-		virtual ~_rope_substr()
-		{}
-
-		virtual bool _M_apply(
-			std::function<bool (_CharT const *, size_type)> __f,
-			size_type __begin, size_type __end
-		);
 	};
 
 	struct _rope_func : public _rope_rep
@@ -390,14 +354,6 @@ protected:
 		_rope_func(decltype(_M_fn) __f, size_type __len)
 		: _rope_rep(_S_ref_tag, 0, true, __len), _M_fn(__f)
 		{}
-
-		virtual ~_rope_func()
-		{}
-
-		virtual bool _M_apply(
-			std::function<bool (_CharT const *, size_type)> __f,
-			size_type __begin, size_type __end
-		);
 	};
 
 	/**
@@ -461,25 +417,95 @@ protected:
 						      size_type __len);
 
 	/**
-	* @brief Concatenate rope and char ptr, copying __s.
-	*/
+	 * @brief Concatenate rope and char ptr, copying __s.
+	 */
 	static rope_rep_ptr _S_concat_char_iter(rope_rep_ptr __r,
 						_CharT const *__s,
 						size_type __len);
 
 	/**
-	 * @brief Traverse tree, applying __f to matching character ranges.
+	 * @brief Apply __f to rope leaf.
+	 */
+	static bool _S_apply(rope_leaf_ptr __r,
+		      std::function<bool (_CharT const *, size_type)> __f,
+		      size_type __begin, size_type __end)
+	{
+		return __f(__r->_M_data + __begin, __end - __begin);
+	}
+
+	/**
+	 * @brief Apply __f to rope concatenation node, left branch first.
+	 */
+	static bool _S_apply(rope_concat_ptr __r,
+		      std::function<bool (_CharT const *, size_type)> __f,
+		      size_type __begin, size_type __end);
+
+	/**
+	 * @brief Apply __f to rope substring node.
+	 */
+	static bool _S_apply(rope_substr_ptr __r,
+		      std::function<bool (_CharT const *, size_type)> __f,
+		      size_type __begin, size_type __end)
+	{
+		return _S_apply_to_pieces(__r->_M_base, __f,
+					  __begin + __r->_M_start,
+					  std::min(__r->_M_size, __end));
+	}
+
+	/**
+	 * @brief Apply __f to lazy rope node.
+	 *
+	 * Node functor will be evaluated upon a temporary storage, which
+	 * will be passed to __f.
+	 */
+	static bool _S_apply(rope_func_ptr __r,
+		      std::function<bool (_CharT const *, size_type)> __f,
+		      size_type __begin, size_type __end);
+
+	/**
+	 * @brief Apply __f to generic rope piece.
+	 *
+	 * Rope will be recursively traversed because of rope_concat_ptr and
+	 * rope_substr_ptr semantics.
+	 *
+	 * Piece-wise application may require access to allocator, which is
+	 * stored externally to the actual rope piece. This effectively
+	 * precludes the use of virtual dispatch, as reference to the enclosing
+	 * counted_ptr may be required.
 	 */
 	static bool _S_apply_to_pieces(
+		rope_rep_ptr __r,
 		std::function<bool (_CharT const *, size_type)> __f,
-		rope_rep_ptr __r, size_type __begin,
-		size_type __end
+		size_type __begin, size_type __end
 	)
 	{
-		if (!__r)
+		if (__r) {
+			switch (__r->_M_tag) {
+			case _rope_tag::_S_leaf:
+				return _S_apply(
+					static_pointer_cast<_rope_leaf>(__r),
+					__f, __begin, __end
+				);
+			case _rope_tag::_S_concat:
+				return _S_apply(
+					static_pointer_cast<_rope_concat>(__r),
+					__f, __begin, __end
+				);
+			case _rope_tag::_S_substr:
+				return _S_apply(
+					static_pointer_cast<_rope_substr>(__r),
+					__f, __begin, __end
+				);
+			case _rope_tag::_S_func:
+				return _S_apply(
+					static_pointer_cast<_rope_func>(__r),
+					__f, __begin, __end
+				);
+			default:
+				return false;
+			};
+		} else
 			return true;
-		else
-			__r->_M_apply(__f, __begin, __end);
 	}
 
 	std::tuple<rope_rep_ptr, allocator_type> _M_treeplus;
