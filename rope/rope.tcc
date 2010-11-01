@@ -65,6 +65,16 @@ rope<_CharT, _Traits, _Alloc>::_S_min_len[_S_max_rope_depth + 1] = {
 
 
 template<typename _CharT, typename _Traits, typename _Alloc>
+const typename rope<_CharT, _Traits, _Alloc>::_rope_rep_ops
+rope<_CharT, _Traits, _Alloc>::_S_rep_ops[_rope_tag::_S_last_tag] = {
+	{&_rope_rep::_S_apply, &_rope_rep::_S_substring},
+	{&_rope_leaf::_S_apply, &_rope_leaf::_S_substring},
+	{&_rope_concat::_S_apply, &_rope_concat::_S_substring},
+	{&_rope_substr::_S_apply, &_rope_substr::_S_substring},
+	{&_rope_func::_S_apply, &_rope_func::_S_substring}
+};
+
+template<typename _CharT, typename _Traits, typename _Alloc>
 void rope<_CharT, _Traits, _Alloc>::_S_add_leaf_to_forest(
 	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __r,
 	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr *__forest
@@ -166,7 +176,7 @@ rope<_CharT, _Traits, _Alloc>::_S_concat(
 
 	if (__l_leaf) {
 		if ((__l_leaf->_M_size + __r_leaf->_M_size)
-		    <= size_type(_S_copy_max))
+		    <= size_type(_S_max_copy))
 			return _S_leaf_concat_char_iter(
 				__l_leaf, __r_leaf->_M_data,
 				__r_leaf->_M_size
@@ -181,7 +191,7 @@ rope<_CharT, _Traits, _Alloc>::_S_concat(
 
 			if (__lr_leaf
 			    && ((__lr_leaf->_M_size + __r_leaf->_M_size)
-				<= size_type(_S_copy_max))) {
+				<= size_type(_S_max_copy))) {
 				rope_rep_ptr __ll(__l_cat->_M_left);
 				rope_rep_ptr __rest(_S_leaf_concat_char_iter(
 					__lr_leaf, __r_leaf->_M_data,
@@ -236,30 +246,64 @@ rope<_CharT, _Traits, _Alloc>::_S_leaf_concat_char_iter(
 	return __result;
 }
 
+template<typename _InputIterator, typename _Size, typename _OutputIterator>
+static bool _out_copy_n(_InputIterator __first, _Size __n,
+			_OutputIterator __result)
+{
+	copy_n(__first, __n, __result);
+	return true;
+}
+
 template<typename _CharT, typename _Traits, typename _Alloc>
-bool rope<_CharT, _Traits, _Alloc>::_S_apply(
-	typename rope<_CharT, _Traits, _Alloc>::rope_concat_ptr __r,
+_CharT *
+rope<_CharT, _Traits, _Alloc>::_S_flatten(
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __r,
+	typename rope<_CharT, _Traits, _Alloc>::size_type __begin,
+	typename rope<_CharT, _Traits, _Alloc>::size_type __len,
+	_CharT *__s)
+{
+	size_type __end(__begin + std::min(__len, __r->_M_size));
+
+	_S_apply(
+		__r,
+		std::bind(
+			&_out_copy_n<_CharT const*, size_type, _CharT *>,
+			std::placeholders::_1,
+			std::placeholders::_2,
+			__s
+		),
+		__begin, __end
+	);
+
+	return __s + (__end - __begin);
+}
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+bool rope<_CharT, _Traits, _Alloc>::_rope_concat::_S_apply(
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __r,
 	std::function<bool (_CharT const *, size_type)> __f,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __begin,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __end
 )
 {
-	rope_rep_ptr __left(__r->_M_left);
-	size_type __l_len(__left->_M_size);
+	rope_concat_ptr __c(static_pointer_cast<_rope_concat>(__r));
+	rope_rep_ptr __left(__c->_M_left);
+	size_type __left_len(__left->_M_size);
 
-	if (__begin < __l_len) {
-		size_type __l_end(std::min(__l_len, __end));
+	if (__begin < __left_len) {
+		size_type __left_end(std::min(__left_len, __end));
 
-		if (!_S_apply_to_pieces(__left, __f, __begin, __l_end))
+		if (!rope_type::_S_apply(__left, __f, __begin, __left_end))
 			return false;
 	}
 
-	if (__end > __l_len) {
-		rope_rep_ptr __right(__r->_M_right);
-		size_type __r_begin(std::max(__l_len, __begin));
+	if (__end > __left_len) {
+		rope_rep_ptr __right(__c->_M_right);
+		size_type __right_begin(std::max(__left_len, __begin));
 
-		if (!_S_apply_to_pieces(__right, __f, __r_begin - __l_len,
-			      __end - __l_len))
+		if (!rope_type::_S_apply(__right, __f,
+					 __right_begin - __left_len,
+					 __end - __left_len))
 			return false;
 	}
 
@@ -267,29 +311,203 @@ bool rope<_CharT, _Traits, _Alloc>::_S_apply(
 }
 
 template<typename _CharT, typename _Traits, typename _Alloc>
-bool rope<_CharT, _Traits, _Alloc>::_S_apply(
-	typename rope<_CharT, _Traits, _Alloc>::rope_func_ptr __r,
-	std::function<bool (_CharT const *, size_type)> __f,
+typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr
+rope<_CharT, _Traits, _Alloc>::_rope_leaf::_S_substring(
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __r,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __begin,
-	typename rope<_CharT, _Traits, _Alloc>::size_type __end
+	typename rope<_CharT, _Traits, _Alloc>::size_type __end,
+	typename rope<_CharT, _Traits, _Alloc>::size_type __adj_end
 )
 {
-	size_type __len(__end - __begin);
-	bool __result;
+	if (__begin >= __adj_end)
+		return rope_rep_ptr();
 
-	_CharT_alloc_type __ca(*get_allocator<_Alloc>(__r));
+	rope_leaf_ptr __l(static_pointer_cast<_rope_leaf>(__r));
+	size_type __result_len(__adj_end - __begin);
 
-	_CharT *__buf(__ca.allocate(__len));
-	__try {
-		__r->_M_fn(__begin, __len, __buf);
-		__result = __f(__buf, __len);
+	if (__result_len > _S_lazy_threshold)
+		return _rope_substr::_S_make(
+			__r, __begin, __adj_end - __begin,
+			*get_allocator<_Alloc>(__r)
+		);
+	else
+		return _rope_leaf::_S_make(
+			__l->_M_data + __begin, __result_len,
+			*get_allocator<_Alloc>(__l)
+		);
+}
 
-		__ca.deallocate(__buf, __len);
-	} __catch(...) {
-		__ca.deallocate(__buf, __len);
-		__throw_exception_again;
+template<typename _CharT, typename _Traits, typename _Alloc>
+typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr
+rope<_CharT, _Traits, _Alloc>::_rope_concat::_S_substring(
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __r,
+	typename rope<_CharT, _Traits, _Alloc>::size_type __begin,
+	typename rope<_CharT, _Traits, _Alloc>::size_type __end,
+	typename rope<_CharT, _Traits, _Alloc>::size_type __adj_end
+)
+{
+	rope_concat_ptr __c(static_pointer_cast<_rope_concat>(__r));
+
+	rope_rep_ptr __left(__c->_M_left), __right(__c->_M_right);
+	size_type __left_len = __left->_M_size;
+
+	if (__adj_end <= __left_len)
+		return rope_type::_S_substring(__left, __begin, __end);
+	else if (__begin >= __left_len)
+		return rope_type::_S_substring(__right, __begin - __left_len,
+					       __adj_end - __left_len);
+
+	rope_rep_ptr __left_res(
+		rope_type::_S_substring(__left, __begin, __left_len)
+	);
+	rope_rep_ptr __right_res(
+		rope_type::_S_substring(__right, 0, __end - __left_len)
+	);
+
+	return _S_concat(__left_res, __right_res);
+}
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr
+rope<_CharT, _Traits, _Alloc>::_rope_substr::_S_substring(
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __r,
+	typename rope<_CharT, _Traits, _Alloc>::size_type __begin,
+	typename rope<_CharT, _Traits, _Alloc>::size_type __end,
+	typename rope<_CharT, _Traits, _Alloc>::size_type __adj_end
+)
+{
+	if (__begin >= __adj_end)
+		return rope_rep_ptr();
+
+	// Avoid introducing multiple layers of substring nodes.
+	rope_substr_ptr __old(static_pointer_cast<_rope_substr>(__r));
+	size_type __result_len(__adj_end - __begin);
+
+	if (__result_len > _S_lazy_threshold)
+		return _rope_substr::_S_make(
+			__old->_M_base, __begin + __old->_M_start,
+			__adj_end - __begin, *get_allocator<_Alloc>(__old)
+		);
+	else
+		return rope_type::_S_substring(
+			__old->_M_base, __begin + __old->_M_start,
+			__adj_end - __begin
+		);
+}
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr
+rope<_CharT, _Traits, _Alloc>::_rope_func::_S_substring(
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __r,
+	typename rope<_CharT, _Traits, _Alloc>::size_type __begin,
+	typename rope<_CharT, _Traits, _Alloc>::size_type __end,
+	typename rope<_CharT, _Traits, _Alloc>::size_type __adj_end
+)
+{
+	if (__begin >= __adj_end)
+		return rope_rep_ptr();
+
+	rope_func_ptr __f(static_pointer_cast<_rope_func>(__r));
+	size_type __result_len(__adj_end - __begin);
+
+	if (__result_len > _S_lazy_threshold)
+		return _rope_substr::_S_make(
+			__r, __begin, __adj_end - __begin,
+			*get_allocator<_Alloc>(__r)
+		);
+	else {
+		rope_leaf_ptr __result(
+			_rope_leaf::_S_make(__result_len,
+					    *get_allocator<_Alloc>(__r))
+		);
+
+		__f->_M_fn(__begin, __result_len, __result->_M_data);
+		return __result;
 	}
-	return __result;
+}
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+std::basic_ostream<_CharT, _Traits> &
+rope<_CharT, _Traits, _Alloc>::_S_dump(
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr const &__r,
+	std::basic_ostream<_CharT, _Traits> &__os,
+	int __indent
+)
+{
+	typedef std::ostream_iterator<_CharT, _CharT, _Traits> iter_type;
+
+	iter_type __out_iter(__os);
+
+	std::fill_n(__out_iter, __indent, __os.fill());
+
+
+	if (!__r) {
+		__os << "NULL\n";
+		return __os;
+	}
+
+	if (__r->_M_tag == _rope_tag::_S_concat) {
+		// To maintain precise diagnostics we must avoid incrementing
+		// reference counts here.
+
+		_rope_concat const *__c(
+			static_cast<_rope_concat const *>(__r.get())
+		);
+
+		rope_rep_ptr const &__left(__c->_M_left);
+		rope_rep_ptr const &__right(__c->_M_right);
+
+		__os << "Concatenation " << __r.get() << " (rc = "
+		     << __r.use_count() << ", depth = "
+		     << static_cast<int>(__r->_M_depth)
+		     << ", size = " << __r->_M_size << ", "
+		     << (__r->_M_is_balanced ? "" : "not") << " balanced)\n";
+
+		return _S_dump(__right, _S_dump(__left, __os, __indent + 2),
+			       __indent + 2);
+	} else {
+		char const *__kind;
+
+		switch (__r->_M_tag) {
+		case _rope_tag::_S_leaf:
+			__kind = "Leaf";
+			break;
+		case _rope_tag::_S_substr:
+			__kind = "Substring";
+			break;
+		case _rope_tag::_S_func:
+			__kind = "Function";
+			break;
+		default:
+			__kind = "(corrupted kind field!)";
+		}
+
+
+		__os << __kind << " " << __r.get() << " (rc = "
+		     << __r.use_count() << ", depth = "
+		     << static_cast<int>(__r->_M_depth)
+		     << ", size = " << __r->_M_size << ") ";
+
+		_CharT __s[_S_max_printout_len];
+		size_type __s_len;
+
+		{
+			rope_rep_ptr __prefix(
+				_S_substring(__r, 0, _S_max_printout_len)
+			);
+
+			_S_flatten(__prefix, __s);
+			__s_len = __prefix->_M_size;
+		}
+
+		__out_iter = __os;
+
+		std::copy_n(__s, __s_len, __out_iter);
+
+		__os << (__r->_M_size > __s_len ? "...\n" : "\n");
+
+		return __os;
+	}
 }
 
 template<typename _CharT, typename _Traits, typename _Alloc>
@@ -350,14 +568,6 @@ rope<_CharT, _Traits, _Alloc>::rope(size_type __n, _CharT __c,
 	std::get<0>(this->_M_treeplus) = std::get<0>(__result._M_treeplus);
 }
 
-template<typename _InputIterator, typename _Size, typename _OutputIterator>
-static bool _out_copy_n(_InputIterator __first, _Size __n,
-			_OutputIterator __result)
-{
-	copy_n(__first, __n, __result);
-	return true;
-}
-
 template<typename _CharT, typename _Traits, typename _Alloc>
 std::basic_ostream<_CharT, _Traits> &operator<<(
 	std::basic_ostream<_CharT, _Traits> &__os,
@@ -377,7 +587,7 @@ std::basic_ostream<_CharT, _Traits> &operator<<(
 	if (!__left && __pad_len > 0)
 		std::fill_n(__out_iter, __pad_len, __os.fill());
 
-	rope_type::_S_apply_to_pieces(
+	rope_type::_S_apply(
 		std::get<0>(__r._M_treeplus),
 		std::bind(
 			&_out_copy_n<_CharT const*, size_type, iter_type>,

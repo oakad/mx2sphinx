@@ -144,25 +144,32 @@ template<typename _CharT, typename _Traits, typename _Alloc>
 struct rope
 {
 protected:
-	typedef typename _Alloc::template rebind<_CharT>::other
-	_CharT_alloc_type;
+	typedef rope<_CharT, _Traits, _Alloc> rope_type;
 
 public:
-	typedef _Traits                               traits_type;
-	typedef typename _Traits::char_type           value_type;
-	typedef _Alloc                                allocator_type;
-	typedef typename _CharT_alloc_type::size_type size_type;
+	typedef _Traits                       traits_type;
+	typedef typename _Traits::char_type   value_type;
+	typedef _Alloc                        allocator_type;
+	typedef typename _Alloc::size_type    size_type;
 
 protected:
 	/* Useful named constants */
 	enum
 	{
-		/// For strings shorter than _S_copy_max, we copy to
+		/// For strings shorter than _S_max_copy, we copy to
 		/// concatenate.
-		_S_copy_max = 23,
+		_S_max_copy = 23,
 
 		/// Maximal rope tree depth.
-		_S_max_rope_depth = 45
+		_S_max_rope_depth = 45,
+
+		/// For substrings longer than _S_lazy_threshold, we create
+		/// substring nodes.
+		_S_lazy_threshold = 128,
+
+		/// When dumping internal structure, string printouts are
+		/// cut to _S_max_printout_len characters.
+		_S_max_printout_len = 40
 	};
 
 	/* Tag for simplified dynamic-like rope component casts. */
@@ -172,7 +179,8 @@ protected:
 		_S_leaf,
 		_S_concat,
 		_S_substr,
-		_S_func
+		_S_func,
+		_S_last_tag
 	};
 
 	static const unsigned long _S_min_len[_S_max_rope_depth + 1];
@@ -188,6 +196,28 @@ protected:
 	typedef counted_ptr<_rope_concat> rope_concat_ptr;
 	typedef counted_ptr<_rope_substr> rope_substr_ptr;
 	typedef counted_ptr<_rope_func> rope_func_ptr;
+
+	/*
+	 * Piece-wise application of functions to rope nodes may require
+	 * access to allocator, which is stored externally to the actual rope
+	 * node. This effectively precludes the use of virtual dispatch,
+	 * as reference to the enclosing counted_ptr may be required.
+	 */
+	struct _rope_rep_ops
+	{
+		bool (*apply)(
+			rope_rep_ptr __r,
+			std::function<bool (_CharT const *, size_type)> __f,
+			size_type __begin, size_type __end
+		);
+
+		rope_rep_ptr (*substring)(
+			rope_rep_ptr __r, size_type __begin,
+			size_type __end, size_type __adj_end
+		);
+	};
+
+	static const _rope_rep_ops _S_rep_ops[_rope_tag::_S_last_tag];
 
 	/**
 	 * @brief _rope_rep implementation cast.
@@ -214,6 +244,23 @@ protected:
 		uint8_t   _M_depth;
 		uint8_t   _M_is_balanced;
 		size_type _M_size;
+
+		static bool _S_apply(
+			rope_rep_ptr __r,
+			std::function<bool (_CharT const *, size_type)> __f,
+			size_type __begin, size_type __end
+		)
+		{
+			return false;
+		}
+
+		static rope_rep_ptr _S_substring(
+			rope_rep_ptr __r, size_type __begin, size_type __end,
+			size_type __adj_end
+		)
+		{
+			return rope_rep_ptr();
+		}
 
 	protected:
 		_rope_rep(_rope_tag __tag, uint8_t __d, bool __b,
@@ -255,7 +302,7 @@ protected:
 		: _rope_rep(_S_ref_tag, 0, true, __len)
 		{
 			if (__len == 1)
-				traits_type::assign(&_M_data[0], *__s);
+				traits_type::assign(_M_data[0], *__s);
 			else
 				traits_type::copy(_M_data, __s, __len);
 
@@ -291,12 +338,27 @@ protected:
 		{
 			return allocate_counted<_rope_leaf>(
 				__a,
-				rope_leaf_ptr::extra_size(
+				typename rope_leaf_ptr::extra_size(
 					_S_rounded_up_size(__len)
 				),
 				__s, __len
 			);
 		}
+
+		static bool _S_apply(
+			rope_rep_ptr __r,
+			std::function<bool (_CharT const *, size_type)> __f,
+			size_type __begin, size_type __end
+		)
+		{
+			rope_leaf_ptr __l(static_pointer_cast<_rope_leaf>(__r));
+			return __f(__l->_M_data + __begin, __end - __begin);
+		}
+
+		static rope_rep_ptr _S_substring(
+			rope_rep_ptr __r, size_type __begin, size_type __end,
+			size_type __adj_end
+		);
 	};
 
 	struct _rope_concat : public _rope_rep
@@ -329,6 +391,17 @@ protected:
 		{
 			return _S_make(__l, __r, *get_allocator<_Alloc>(__l));
 		}
+
+		static bool _S_apply(
+			rope_rep_ptr __r,
+			std::function<bool (_CharT const *, size_type)> __f,
+			size_type __begin, size_type __end
+		);
+
+		static rope_rep_ptr _S_substring(
+			rope_rep_ptr __r, size_type __begin, size_type __end,
+			size_type __adj_end
+		);
 	};
 
 	struct _rope_substr : public _rope_rep
@@ -343,6 +416,35 @@ protected:
 		: _rope_rep(_S_ref_tag, 0, true, __len), _M_base(__base),
 		  _M_start(__start)
 		{}
+
+		static rope_substr_ptr _S_make(
+			rope_rep_ptr __base, size_type __start,
+			size_type __len, _Alloc &&__a)
+		{
+			return allocate_counted<_rope_substr>(
+				__a, __base, __start, __len
+			);
+		}
+
+		static bool _S_apply(
+			rope_rep_ptr __r,
+			std::function<bool (_CharT const *, size_type)> __f,
+			size_type __begin, size_type __end
+		)
+		{
+			rope_substr_ptr __s(
+				static_pointer_cast<_rope_substr>(__r)
+			);
+			return rope_type::_S_apply(
+				__s->_M_base, __f, __begin + __s->_M_start,
+				std::min(__s->_M_size, __end)
+			);
+		}
+
+		static rope_rep_ptr _S_substring(
+			rope_rep_ptr __r, size_type __begin, size_type __end,
+			size_type __adj_end
+		);
 	};
 
 	struct _rope_func : public _rope_rep
@@ -354,6 +456,35 @@ protected:
 		_rope_func(decltype(_M_fn) __f, size_type __len)
 		: _rope_rep(_S_ref_tag, 0, true, __len), _M_fn(__f)
 		{}
+
+		/* _M_fn will be evaluated into a temporary leaf node,
+		 * before application of __f.
+		 */
+		static bool _S_apply(
+			rope_rep_ptr __r,
+			std::function<bool (_CharT const *, size_type)> __f,
+			size_type __begin, size_type __end
+		)
+		{
+			size_type __len(__end - __begin);
+			rope_leaf_ptr __l(
+				_rope_leaf::_S_make(
+					__len, *get_allocator<_Alloc>(__r)
+				)
+			);
+
+			static_pointer_cast<_rope_func>(__r)->_M_fn(
+				__begin, __len, __l->_M_data
+			);
+
+			return __f(__l->_M_data, __len);
+		}
+
+
+		static rope_rep_ptr _S_substring(
+			rope_rep_ptr __r, size_type __begin, size_type __end,
+			size_type __adj_end
+		);
 	};
 
 	/**
@@ -424,89 +555,78 @@ protected:
 						size_type __len);
 
 	/**
-	 * @brief Apply __f to rope leaf.
-	 */
-	static bool _S_apply(rope_leaf_ptr __r,
-		      std::function<bool (_CharT const *, size_type)> __f,
-		      size_type __begin, size_type __end)
-	{
-		return __f(__r->_M_data + __begin, __end - __begin);
-	}
-
-	/**
-	 * @brief Apply __f to rope concatenation node, left branch first.
-	 */
-	static bool _S_apply(rope_concat_ptr __r,
-		      std::function<bool (_CharT const *, size_type)> __f,
-		      size_type __begin, size_type __end);
-
-	/**
-	 * @brief Apply __f to rope substring node.
-	 */
-	static bool _S_apply(rope_substr_ptr __r,
-		      std::function<bool (_CharT const *, size_type)> __f,
-		      size_type __begin, size_type __end)
-	{
-		return _S_apply_to_pieces(__r->_M_base, __f,
-					  __begin + __r->_M_start,
-					  std::min(__r->_M_size, __end));
-	}
-
-	/**
-	 * @brief Apply __f to lazy rope node.
+	 * @brief Copy substring of __r to the _CharT array.
 	 *
-	 * Node functor will be evaluated upon a temporary storage, which
-	 * will be passed to __f.
+	 * @return Pointer to the end of the array.
 	 */
-	static bool _S_apply(rope_func_ptr __r,
-		      std::function<bool (_CharT const *, size_type)> __f,
-		      size_type __begin, size_type __end);
+	static _CharT *_S_flatten(rope_rep_ptr __r, size_type __begin,
+				  size_type __len, _CharT *__s);
+
+	/**
+	 * @brief Copy __r to the _CharT array.
+	 *
+	 * @return Pointer to the end of the array (__s + __r->_M_size).
+	 */
+	static _CharT *_S_flatten(rope_rep_ptr __r, _CharT *__s)
+	{
+		return _S_flatten(__r, 0, __r->_M_size, __s);
+	}
+
+	/**
+	 * @brief Construct rope tree representing a substring of __r.
+	 *
+	 * Rope will be recursively traversed because of rope_concat_ptr and
+	 * rope_substr_ptr semantics.
+	 */
+	static rope_rep_ptr _S_substring(rope_rep_ptr __r, size_type __begin,
+					 size_type __end)
+	{
+		if (!__r)
+			return __r;
+
+		size_type __len(__r->_M_size);
+		size_type __adj_end;
+
+		if (__end >= __len) {
+			if (0 == __begin)
+				return __r;
+			else
+				__adj_end = __len;
+		} else
+			__adj_end = __end;
+
+		return _S_rep_ops[static_cast<size_t>(__r->_M_tag)]
+		       .substring(__r, __begin, __end, __adj_end);
+
+	}
 
 	/**
 	 * @brief Apply __f to generic rope piece.
 	 *
 	 * Rope will be recursively traversed because of rope_concat_ptr and
 	 * rope_substr_ptr semantics.
-	 *
-	 * Piece-wise application may require access to allocator, which is
-	 * stored externally to the actual rope piece. This effectively
-	 * precludes the use of virtual dispatch, as reference to the enclosing
-	 * counted_ptr may be required.
 	 */
-	static bool _S_apply_to_pieces(
+	static bool _S_apply(
 		rope_rep_ptr __r,
 		std::function<bool (_CharT const *, size_type)> __f,
 		size_type __begin, size_type __end
 	)
 	{
-		if (__r) {
-			switch (__r->_M_tag) {
-			case _rope_tag::_S_leaf:
-				return _S_apply(
-					static_pointer_cast<_rope_leaf>(__r),
-					__f, __begin, __end
-				);
-			case _rope_tag::_S_concat:
-				return _S_apply(
-					static_pointer_cast<_rope_concat>(__r),
-					__f, __begin, __end
-				);
-			case _rope_tag::_S_substr:
-				return _S_apply(
-					static_pointer_cast<_rope_substr>(__r),
-					__f, __begin, __end
-				);
-			case _rope_tag::_S_func:
-				return _S_apply(
-					static_pointer_cast<_rope_func>(__r),
-					__f, __begin, __end
-				);
-			default:
-				return false;
-			};
-		} else
+		if (__r)
+			return _S_rep_ops[static_cast<size_t>(__r->_M_tag)]
+			       .apply(__r, __f, __begin, __end);
+		else
 			return true;
 	}
+
+	/**
+	 * @brief Dump internal rope structure to the supplied ostream.
+	 */
+	static std::basic_ostream<_CharT, _Traits> &_S_dump(
+		rope_rep_ptr const &__r,
+		std::basic_ostream<_CharT, _Traits> &__os,
+		int __indent = 0
+	);
 
 	std::tuple<rope_rep_ptr, allocator_type> _M_treeplus;
 
@@ -547,6 +667,124 @@ public:
 	rope(_Alloc &&__a = _Alloc())
 	: _M_treeplus(rope_rep_ptr(), __a)
 	{}
+
+	~rope()
+	{}
+
+	rope &operator=(rope const &__r)
+	{
+		std::get<0>(_M_treeplus) = std::get<0>(__r._M_treeplus);
+
+		return *this;
+	}
+
+	void clear()
+	{
+		std::get<0>(_M_treeplus).reset();
+	}
+
+	void push_back(_CharT __c)
+	{
+		std::get<0>(_M_treeplus)
+		= _S_destr_concat_char_iter(std::get<0>(_M_treeplus), &__c, 1);
+	}
+
+	void pop_back()
+	{
+		rope_rep_ptr __old(std::get<0>(_M_treeplus));
+
+		std::get<0>(_M_treeplus)
+		= _S_substring(__old, 0, __old->_M_size - 1);
+	}
+
+	_CharT back() const
+	{
+		rope_rep_ptr __r(std::get<0>(_M_treeplus));
+
+		return _S_fetch(__r, __r->_M_size - 1);
+	}
+
+	void push_front(_CharT __c)
+	{
+		rope_rep_ptr __old(std::get<0>(_M_treeplus));
+		rope_leaf_ptr __l(
+			_rope_leaf::_S_make(&__c, 1, std::get<1>(_M_treeplus))
+		);
+
+		std::get<0>(_M_treeplus) = _S_concat(__l, __old);
+	}
+
+	void pop_front()
+	{
+		rope_rep_ptr __old(std::get<0>(_M_treeplus));
+
+		std::get<0>(_M_treeplus)
+		= _S_substring(__old, 1, __old->_M_size);
+	}
+
+	_CharT front() const
+	{
+		return _S_fetch(std::get<0>(_M_treeplus), 0);
+	}
+
+	void balance()
+	{
+		rope_rep_ptr __old(std::get<0>(_M_treeplus));
+
+		std::get<0>(_M_treeplus) = _S_balance(__old);
+	}
+
+	void copy(_CharT *__s) const
+	{
+		_S_flatten(std::get<0>(_M_treeplus), __s);
+	}
+
+	size_type copy(_CharT *__s, size_type __n, size_type __pos = 0) const
+	{
+		size_type __size(this->size());
+		size_type __len(__pos + __n > __size ? __size - __pos : __n);
+
+		_S_flatten(std::get<0>(_M_treeplus), __pos, __len, __s);
+		return __len;
+	}
+
+	class _rope_dumper
+	{
+		friend class rope;
+
+		_rope_dumper(rope_rep_ptr __r)
+		: _M_r(__r)
+		{}
+
+		std::basic_ostream<_CharT, _Traits> &_M_dump(
+			std::basic_ostream<_CharT, _Traits> &__os
+		) const
+		{
+			return rope_type::_S_dump(_M_r, __os);
+		}
+
+		friend std::basic_ostream<_CharT, _Traits> &operator<<(
+			std::basic_ostream<_CharT, _Traits> &__os,
+			_rope_dumper const &__d
+		)
+		{
+			return __d._M_dump(__os);
+		}
+
+		rope_rep_ptr _M_r;
+	};
+
+	/**
+	 * @brief Expose internal rope structure.
+	 *
+	 * Useful primarily for debugging.
+	 * @return Proxy object which can be printed to ostream interface.
+	 */
+	_rope_dumper dump()
+	{
+		 return _rope_dumper(std::get<0>(_M_treeplus));
+	}
+
 
 	size_type size() const
 	{
