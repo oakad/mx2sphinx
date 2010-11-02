@@ -49,127 +49,52 @@ template< typename _CharT, typename _Traits = std::char_traits<_CharT>,
 struct rope;
 
 template<typename _CharT, typename _Traits, typename _Alloc>
-class _rope_iterator;
-
-template<typename _CharT, typename _Traits, typename _Alloc>
-class _rope_const_iterator;
-
-template<typename _CharT, typename _Traits, typename _Alloc>
-class _rope_char_ref_proxy;
-
-template<typename _CharT, typename _Traits, typename _Alloc>
-class _rope_char_ptr_proxy;
-
-template<typename _CharT, typename _Traits, typename _Alloc>
-bool operator==(
-	const _rope_char_ptr_proxy<_CharT, _Traits, _Alloc>& __x,
-	const _rope_char_ptr_proxy<_CharT, _Traits, _Alloc>& __y
-);
-/*
-template<typename _CharT, typename _Traits, typename _Alloc>
-_rope_const_iterator<_CharT, _Traits, _Alloc> operator-(
-	const _Rope_const_iterator<_CharT, _Traits, _Alloc>& __x,
-	ptrdiff_t __n
-);
-
-template<typename _CharT, typename _Traits, typename _Alloc>
-_rope_const_iterator<_CharT, _Traits, _Alloc> operator+(
-	const _rope_const_iterator<_CharT, _Traits, _Alloc>& __x,
-	      ptrdiff_t __n);
-
-  template<class _CharT, class _Alloc>
-    _Rope_const_iterator<_CharT, _Traits, _Alloc>
-    operator+(ptrdiff_t __n,
-	      const _Rope_const_iterator<_CharT, _Traits, _Alloc>& __x);
-
-  template<class _CharT, class _Alloc>
-    bool
-    operator==(const _Rope_const_iterator<_CharT, _Traits, _Alloc>& __x,
-	       const _Rope_const_iterator<_CharT, _Traits, _Alloc>& __y);
-
-  template<class _CharT, class _Alloc>
-    bool
-    operator<(const _Rope_const_iterator<_CharT, _Traits, _Alloc>& __x,
-	      const _Rope_const_iterator<_CharT, _Traits, _Alloc>& __y);
-
-  template<class _CharT, class _Alloc>
-    ptrdiff_t
-    operator-(const _Rope_const_iterator<_CharT, _Traits, _Alloc>& __x,
-	      const _Rope_const_iterator<_CharT, _Traits, _Alloc>& __y);
-
-  template<class _CharT, class _Alloc>
-    _Rope_iterator<_CharT, _Traits, _Alloc>
-    operator-(const _Rope_iterator<_CharT, _Traits, _Alloc>& __x, ptrdiff_t __n);
-
-  template<class _CharT, class _Alloc>
-    _Rope_iterator<_CharT, _Traits, _Alloc>
-    operator+(const _Rope_iterator<_CharT, _Traits, _Alloc>& __x, ptrdiff_t __n);
-
-  template<class _CharT, class _Alloc>
-    _Rope_iterator<_CharT, _Traits, _Alloc>
-    operator+(ptrdiff_t __n, const _Rope_iterator<_CharT, _Traits, _Alloc>& __x);
-
-  template<class _CharT, class _Alloc>
-    bool
-    operator==(const _Rope_iterator<_CharT, _Traits, _Alloc>& __x,
-	       const _Rope_iterator<_CharT, _Traits, _Alloc>& __y);
-
-  template<class _CharT, class _Alloc>
-    bool
-    operator<(const _Rope_iterator<_CharT, _Traits, _Alloc>& __x,
-	      const _Rope_iterator<_CharT, _Traits, _Alloc>& __y);
-
-  template<class _CharT, class _Alloc>
-    ptrdiff_t
-    operator-(const _Rope_iterator<_CharT, _Traits, _Alloc>& __x,
-	      const _Rope_iterator<_CharT, _Traits, _Alloc>& __y);
-
-
-
-
-template<typename _CharT, typename _Traits, typename _Alloc>
-rope<_CharT, _Traits, _Alloc> operator+(
-	rope<_CharT, _Traits, _Alloc> const &__left,
-	_CharT const *__right
-);
-
-template<typename _CharT, typename _Traits, typename _Alloc>
-rope<_CharT, _Traits, _Alloc> operator+(
-	rope<_CharT, _Traits, _Alloc> const &__left,
-	_CharT __right
-);
-*/
-
-template<typename _CharT, typename _Traits, typename _Alloc>
 struct rope
 {
 protected:
-	typedef rope<_CharT, _Traits, _Alloc> rope_type;
-
+	typedef rope<_CharT, _Traits, _Alloc>         rope_type;
 public:
-	typedef _Traits                       traits_type;
-	typedef typename _Traits::char_type   value_type;
-	typedef _Alloc                        allocator_type;
-	typedef typename _Alloc::size_type    size_type;
+	typedef _Traits                               traits_type;
+	typedef typename _Traits::char_type           value_type;
+	typedef _Alloc                                allocator_type;
+	typedef typename _Alloc::size_type            size_type;
+	typedef typename _Alloc::difference_type      difference_type;
+	struct                                        reference;
+	struct                                        pointer;
+	struct                                        const_iterator;
+	struct                                        iterator;
+	typedef std::reverse_iterator<iterator>       reverse_iterator;
+	typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
 
 protected:
 	/* Useful named constants */
 	enum
 	{
+		/// We allocate leaf data in increments of
+		/// 1 << _S_alloc_granularity_shift.
+		_S_alloc_granularity_shift = 3,
+
+		/// Iterators will store _S_path_cache_len rope node references.
+		_S_path_cache_len = 5,
+
+		/// Iterators will cache _S_iterator_buf_len characters from
+		/// non-leaf rope nodes.
+		_S_iterator_buf_len = 16,
+
 		/// For strings shorter than _S_max_copy, we copy to
 		/// concatenate.
 		_S_max_copy = 23,
+
+		/// When dumping internal structure, string printouts are
+		/// cut to _S_max_printout_len characters.
+		_S_max_printout_len = 40,
 
 		/// Maximal rope tree depth.
 		_S_max_rope_depth = 45,
 
 		/// For substrings longer than _S_lazy_threshold, we create
 		/// substring nodes.
-		_S_lazy_threshold = 128,
-
-		/// When dumping internal structure, string printouts are
-		/// cut to _S_max_printout_len characters.
-		_S_max_printout_len = 40
+		_S_lazy_threshold = 128
 	};
 
 	/* Tag for simplified dynamic-like rope component casts. */
@@ -238,7 +163,7 @@ protected:
 
 	struct _rope_rep
 	{
-		static const _rope_tag _S_ref_tag = _rope_tag::_S_null;
+		static _rope_tag const _S_ref_tag = _rope_tag::_S_null;
 
 		_rope_tag _M_tag;
 		uint8_t   _M_depth;
@@ -274,16 +199,14 @@ protected:
 	{
 		static const _rope_tag _S_ref_tag = _rope_tag::_S_leaf;
 
-		enum { _S_alloc_granularity = 8 };
-
 		_CharT _M_data[];
 
 		static size_type _S_rounded_up_size(size_type __n)
 		{
 			// Allow slop for in-place expansion.
-			return (((__n + 1)
-				 + size_type(_S_alloc_granularity) - 1)
-				& ~(size_type(_S_alloc_granularity) - 1));
+
+			return ((__n >> _S_alloc_granularity_shift) + 1)
+			       << _S_alloc_granularity_shift;
 		}
 
 		_rope_leaf(size_type __len)
@@ -295,7 +218,6 @@ protected:
 		: _rope_rep(_S_ref_tag, 0, true, __n)
 		{
 			traits_type::assign(_M_data, __n, __c);
-			traits_type::assign(_M_data[__n], _CharT());
 		}
 
 		_rope_leaf(_CharT const *__s, size_type __len)
@@ -305,8 +227,6 @@ protected:
 				traits_type::assign(_M_data[0], *__s);
 			else
 				traits_type::copy(_M_data, __s, __len);
-
-			traits_type::assign(_M_data[__len], _CharT());
 		}
 
 		static rope_leaf_ptr _S_make(size_type __len,
@@ -487,6 +407,93 @@ protected:
 		);
 	};
 
+	struct _iterator_base
+	{
+		/// Iterator value.
+		size_type    _M_current_pos;
+		/// The whole referenced rope.
+		rope_rep_ptr _M_root;
+		/// Starting position for the current leaf
+		size_type    _M_leaf_pos;
+
+		/// _M_path_end contains the bottom section of the path
+		/// from the root to the current leaf, representing partial
+		/// path cache. The path is truncated to keep iterators copying
+		/// penalty to the possible minimum.
+		rope_rep_ptr _M_path_end[_S_path_cache_len];
+
+		/// Last valid position in _M_path_end.
+		/// _M_path_end[0] ... _M_path_end[_M_path_index-1]
+		/// point to concatenation nodes.
+		int _M_path_index;
+
+		/// (_M_path_directions >> __i) & 1 is 1
+		/// iff we got from _M_path_end[_M_path_index - __i - 1]
+		/// to _M_path_end[_M_path_index - __i] by going to the
+		/// __right.
+		unsigned int _M_path_directions;
+
+		/// Buffer possibly containing current char.
+		value_type const *_M_buf_begin;
+
+		/// One past last valid value in buffer.
+		value_type const *_M_buf_end;
+
+		/// Pointer to current char in buffer.
+		/// Iff _M_buf_cur != 0 buffer is valid.
+		value_type const *_M_buf_cur;
+
+		/// Short buffer for surrounding values.
+		/// This is useful primarily for function nodes.  We put the
+		/// buffer here to avoid locking in the multithreaded case.
+		/// The cached path is generally assumed to be valid only if
+		/// the buffer is valid.
+		_CharT _M_tmp_buf[_S_iterator_buf_len];
+
+		/**
+		 * @brief Set buffer contents given path cache.
+		 */
+		static void _S_setbuf(_iterator_base &__iter);
+
+		/**
+		 * @brief Set buffer contents and path cache.
+		 */
+		static void _S_setcache(_iterator_base &__iter);
+
+		/**
+		 * @brief Set buffer contents and path cache.
+		 *
+		 * Assumes path cache is valid for previous position.
+		 */
+		static void _S_setcache_for_incr(_iterator_base &__iter);
+
+		void _M_incr(size_type __n);
+		void _M_decr(size_type __n);
+
+		size_type index() const
+		{
+			return _M_current_pos;
+		}
+
+		_iterator_base()
+		{}
+
+		_iterator_base(rope_rep_ptr __root, size_type __pos)
+		: _M_current_pos(__pos), _M_root(__root), _M_buf_cur(0)
+		{}
+
+		_iterator_base(_iterator_base const &__iter)
+		{
+			if (__iter._M_buf_cur)
+				*this = __iter;
+			else {
+				_M_current_pos = __iter._M_current_pos;
+				_M_root = __iter._M_root;
+				_M_buf_cur = 0;
+			}
+		}
+	};
+
 	/**
 	 * @brief Definition of the balanced sub-tree.
 	 */
@@ -620,6 +627,14 @@ protected:
 	}
 
 	/**
+	 * @brief Slightly faster rope subtree 3 way compare.
+	 *
+	 * This function will bypass the use of rope iterators if one or both
+	 * subtrees are single leafs.
+	 */
+	int _S_compare(rope_rep_ptr __left, rope_rep_ptr __right);
+
+	/**
 	 * @brief Dump internal rope structure to the supplied ostream.
 	 */
 	static std::basic_ostream<_CharT, _Traits> &_S_dump(
@@ -640,26 +655,94 @@ private:
 	{}
 
 public:
+	struct reference
+	{
+	};
+
+	struct pointer
+	{
+	};
+
+	struct const_iterator : public _iterator_base
+	{
+		typedef std::random_access_iterator_tag iterator_category;
+		typedef rope_type::value_type           value_type;
+		typedef rope_type::reference            reference;
+		typedef rope_type::pointer              pointer;
+		typedef rope_type::size_type            size_type;
+		typedef rope_type::difference_type      difference_type;
+	};
+
+	struct iterator : public _iterator_base
+	{
+		typedef std::random_access_iterator_tag iterator_category;
+		typedef rope_type::value_type           value_type;
+		typedef rope_type::reference            reference;
+		typedef rope_type::pointer              pointer;
+		typedef rope_type::size_type            size_type;
+		typedef rope_type::difference_type      difference_type;
+	};
+
 	bool empty() const
 	{
 		return !(_M_treeplus._M_v);
 	}
 
+	int compare(rope const &__r) const
+	{
+		return _S_compare(std::get<0>(_M_treeplus),
+				  std::get<0>(__r._M_treeplus));
+	}
+
 	rope(_CharT const *__s, _Alloc &&__a = _Alloc())
-	: _M_treeplus(
-		__s ? _rope_leaf::_S_make(__s, traits_type::length(__s),
-					  std::forward(__a))
-		    : rope_rep_ptr(),
-		std::forward(__a)
-	)
-	{}
+	: _M_treeplus(rope_rep_ptr(), __a)
+	{
+		if (__s && traits_type::length(__s)) {
+			rope_leaf_ptr __l(
+				_rope_leaf::_S_make(
+					__s, traits_type::length(__s), __a
+				)
+			);
+			std::get<0>(_M_treeplus) = __l;
+		}
+	}
 
 	rope(_CharT const *__s, size_type __len, _Alloc &&__a = _Alloc())
-	: _M_treeplus(
-		__s ? _rope_leaf::_S_make(__s, __len, std::forward(__a))
-		    : rope_rep_ptr(),
-		std::forward(__a)
-	)
+	: _M_treeplus(rope_rep_ptr(), __a)
+	{
+		if (__s && __len) {
+			rope_leaf_ptr __l(_rope_leaf::_S_make(__s, __len, __a));
+			std::get<0>(_M_treeplus) = __l;
+		}
+	}
+
+	template<typename _InputIterator>
+	rope(_InputIterator __b, _InputIterator __e, _Alloc &&__a = _Alloc())
+	: _M_treeplus(rope_rep_ptr(), __a)
+	{
+		size_type __len(__e - __b);
+
+		if (__len) {
+			rope_leaf_ptr __l(_rope_leaf::_S_make(__len, __a));
+			std::copy(__b, __e, __l->_M_data);
+			std::get<0>(_M_treeplus) = __l;
+		}
+	}
+
+	rope(const_iterator const &__b, const_iterator const &__e,
+	     _Alloc &&__a = _Alloc())
+	: _M_treeplus(_S_substring(__b._M_root, __b._M_current_pos,
+				   __e._M_current_pos), __a)
+	{}
+
+	rope(iterator const &__b, iterator const &__e,
+	     _Alloc &&__a = _Alloc())
+	: _M_treeplus(_S_substring(__b._M_root, __b._M_current_pos,
+				   __e._M_current_pos), __a)
+	{}
+
+	rope(_CharT __c, _Alloc &&__a = _Alloc())
+	: _M_treeplus(_rope_leaf::_S_make(1, __c, __a), __a)
 	{}
 
 	rope(size_type __n, _CharT __c, _Alloc &&__a = _Alloc());

@@ -42,9 +42,7 @@
 #ifndef _EXT_ROPE_TCC
 #define _EXT_ROPE_TCC 1
 
-#include <bits/functexcept.h>
-#include <ext/numeric>
-#include <algorithm>
+#include <ext/algorithm>
 
 template<typename _CharT, typename _Traits, typename _Alloc>
 const unsigned long
@@ -241,7 +239,6 @@ rope<_CharT, _Traits, _Alloc>::_S_leaf_concat_char_iter(
 
 	traits_type::copy(&__result->_M_data[0], __r->_M_data, __old_len);
 	traits_type::copy(&__result->_M_data[__old_len], __iter, __len);
-	traits_type::assign(__result->_M_data[__new_len], _CharT());
 
 	return __result;
 }
@@ -427,6 +424,245 @@ rope<_CharT, _Traits, _Alloc>::_rope_func::_S_substring(
 }
 
 template<typename _CharT, typename _Traits, typename _Alloc>
+void
+rope<_CharT, _Traits, _Alloc>::_iterator_base::_S_setbuf(
+	typename rope<_CharT, _Traits, _Alloc>::_iterator_base &__iter
+)
+{
+	size_type __leaf_pos(__iter._M_leaf_pos);
+	size_type __pos(__iter._M_current_pos);
+
+	rope_leaf_ptr __l(
+		_S_rep_cast<_rope_leaf>(
+			__iter._M_path_end[__iter._M_path_index]
+		)
+	);
+
+	if (__l) {
+		__iter._M_buf_begin = __l->_M_data;
+		__iter._M_buf_cur = __iter._M_buf_begin + (__pos - __leaf_pos);
+		__iter._M_buf_end = __iter._M_buf_start + __l->_M_size;
+	} else {
+		size_type __len(_S_iterator_buf_len);
+		size_type __buf_start_pos(__leaf_pos);
+		size_t __leaf_end(
+			__iter._M_path_end[__iter._M_path_index]->_M_size
+			+ __leaf_pos
+		);
+
+		if (__buf_start_pos + __len <= __pos) {
+			__buf_start_pos = __pos - __len / 4;
+
+			if (__buf_start_pos + __len > __leaf_end)
+				__buf_start_pos = __leaf_end - __len;
+		}
+
+		if (__buf_start_pos + __len > __leaf_end)
+			__len = __leaf_end - __buf_start_pos;
+
+		_S_apply(
+			__iter._M_path_end[__iter._M_path_index],
+			std::bind(
+				&_out_copy_n<_CharT const*, size_type,
+					     _CharT *>,
+				std::placeholders::_1,
+				std::placeholders::_2,
+				__iter._M_tmp_buf
+			),
+			__buf_start_pos - __leaf_pos,
+			__buf_start_pos - __leaf_pos + __len
+		);
+
+		__iter._M_buf_cur = __iter._M_tmp_buf
+				    + (__pos - __buf_start_pos);
+		__iter._M_buf_begin = __iter._M_tmp_buf;
+		__iter._M_buf_end = __iter._M_tmp_buf + __len;
+	}
+}
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+void
+rope<_CharT, _Traits, _Alloc>::_iterator_base::_S_setcache(
+	typename rope<_CharT, _Traits, _Alloc>::_iterator_base &__iter
+)
+{
+	size_type __pos(__iter._M_current_pos);
+
+	if (__pos >= __iter._M_root->_M_size) {
+		__iter._M_buf_cur = 0;
+		return;
+	}
+
+	rope_rep_ptr __path[_S_max_rope_depth + 1];
+	// Index into path.
+	int __cur_depth(-1);
+
+	size_type __cur_start_pos(0);
+
+	// Bit vector marking right turns in the path.
+	unsigned short __dirns(0);
+
+	rope_rep_ptr __cur_rope(__iter._M_root);
+
+	while (true) {
+		++__cur_depth;
+		__path[__cur_depth] = __cur_rope;
+		rope_concat_ptr __c(_S_rep_cast<_rope_concat>(__cur_rope));
+
+		if (__c) {
+			size_type __left_len(__c->_M_left->_M_size);
+
+			__dirns <<= 1;
+
+			if (__pos >= __cur_start_pos + __left_len) {
+				__dirns |= 1;
+				__cur_rope = __c->_M_right;
+				__cur_start_pos += __left_len;
+			} else
+				__cur_rope = __c->_M_left;
+		} else {
+			__iter._M_leaf_pos = __cur_start_pos;
+			break;
+		}
+	}
+
+	// Copy last section of path into _M_path_end.
+	{
+		int __i(-1);
+		int __j(__cur_depth + 1 - _S_path_cache_len);
+
+		if (__j < 0)
+			__j = 0;
+
+		while (__j <= __cur_depth)
+			__iter._M_path_end[++__i] = __path[__j++];
+
+		__iter._M_path_index = __i;
+	}
+
+	__iter._M_path_directions = __dirns;
+	_S_setbuf(__iter);
+}
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+void
+rope<_CharT, _Traits, _Alloc>::_iterator_base::_S_setcache_for_incr(
+	typename rope<_CharT, _Traits, _Alloc>::_iterator_base &__iter
+)
+{
+	int __current_index(__iter._M_path_index);
+	size_type __len(__iter._M_path_end[__current_index]->_M_size);
+	size_type __node_start_pos(__iter._M_leaf_pos);
+	unsigned short __dirns(__iter._M_path_directions);
+
+	if (__iter._M_current_pos - __node_start_pos < __len) {
+		/* More stuff in this leaf, we just didn't cache it. */
+		_S_setbuf(__iter);
+		return;
+	}
+
+	//  __node_start_pos is starting position of last node.
+	while (--__current_index >= 0) {
+		if (!(__dirns & 1)) /* Path turned left */
+			break;
+
+		rope_concat_ptr __c(
+			static_pointer_cast<_rope_concat>(
+				__iter._M_path_end[__current_index]
+			)
+		);
+
+		// Otherwise we were in the right child.  Thus we should pop
+		// the concatenation node.
+		__node_start_pos -= __c->_M_left->_M_size;
+		__dirns >>= 1;
+	}
+
+	if (__current_index < 0) {
+		// We underflowed the cache. Punt.
+		_S_setcache(__iter);
+		return;
+	}
+
+	// Node at __current_index is a concatenation node.  We are positioned
+	// on the first character in its right child..
+	// __node_start_pos is starting position of current_node.
+	rope_concat_ptr __c(
+		static_pointer_cast<_rope_concat>(
+			__iter._M_path_end[__current_index]
+		)
+	);
+
+	__node_start_pos += __c->_M_left->_M_size;
+	__iter._M_path_end[++__current_index] = __c->_M_right;
+	__dirns |= 1;
+	__c = _S_rep_cast<_rope_concat>(__c->_M_right);
+
+	while (__c) {
+		++__current_index;
+
+		if (_S_path_cache_len == __current_index) {
+			int __i;
+
+			for (int __i = 0; __i < (_S_path_cache_len - 1); ++__i)
+				__iter._M_path_end[__i]
+				= __iter._M_path_end[__i+1];
+
+			--__current_index;
+		}
+
+		__iter._M_path_end[__current_index] = __c->_M_left;
+		__dirns <<= 1;
+		__c = _S_rep_cast<_rope_concat>(__c->_M_left);
+		// node_start_pos is unchanged.
+	}
+
+	__iter._M_path_index = __current_index;
+	__iter._M_leaf_pos = __node_start_pos;
+	__iter._M_path_directions = __dirns;
+	_S_setbuf(__iter);
+}
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+void
+rope<_CharT, _Traits, _Alloc>::_iterator_base::_M_incr(
+	typename rope<_CharT, _Traits, _Alloc>::size_type __n
+)
+{
+	_M_current_pos += __n;
+
+	if (_M_buf_cur) {
+		size_type __chars_left(_M_buf_end - _M_buf_cur);
+
+		if (__chars_left > __n)
+			_M_buf_cur += __n;
+		else if (__chars_left == __n) {
+			_M_buf_cur += __n;
+			_S_setcache_for_incr(*this);
+		} else
+			_M_buf_cur = 0;
+	}
+}
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+void
+rope<_CharT, _Traits, _Alloc>::_iterator_base::_M_decr(
+	typename rope<_CharT, _Traits, _Alloc>::size_type __n
+)
+{
+	if (_M_buf_cur) {
+		size_type __chars_left(_M_buf_cur - _M_buf_begin);
+
+		if (__chars_left >= __n)
+			_M_buf_cur -= __n;
+		else
+			_M_buf_cur = 0;
+	}
+
+	_M_current_pos -= __n;
+}
+
+template<typename _CharT, typename _Traits, typename _Alloc>
 std::basic_ostream<_CharT, _Traits> &
 rope<_CharT, _Traits, _Alloc>::_S_dump(
 	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr const &__r,
@@ -482,7 +718,6 @@ rope<_CharT, _Traits, _Alloc>::_S_dump(
 			__kind = "(corrupted kind field!)";
 		}
 
-
 		__os << __kind << " " << __r.get() << " (rc = "
 		     << __r.use_count() << ", depth = "
 		     << static_cast<int>(__r->_M_depth)
@@ -507,6 +742,59 @@ rope<_CharT, _Traits, _Alloc>::_S_dump(
 		__os << (__r->_M_size > __s_len ? "...\n" : "\n");
 
 		return __os;
+	}
+}
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+int
+rope<_CharT, _Traits, _Alloc>::_S_compare(
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __left,
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __right
+)
+{
+	if (!__right)
+		return (!__left) ? 1 : 0;
+
+	if (!__left)
+		return -1;
+
+	size_type __left_len(__left->_M_size);
+	size_type __right_len(__right->_M_size);
+
+	rope_leaf_ptr __l(_S_rep_cast<_rope_leaf>(__left));
+
+	if (__l) {
+		rope_leaf_ptr __r(_S_rep_cast<_rope_leaf>(__right));
+		if (__r)
+			return __gnu_cxx::lexicographical_compare_3way(
+				__l->_M_data, __l->_M_data + __left_len,
+				__r->_M_data, __r->_M_data + __right_len
+			);
+		else {
+			const_iterator __rstart(__right, 0);
+			const_iterator __rend(__right, __right_len);
+			return __gnu_cxx::lexicographical_compare_3way(
+				__l->_M_data, __l->_M_data + __left_len,
+				__rstart, __rend
+			);
+		}
+	} else {
+		const_iterator __lstart(__left, 0);
+		const_iterator __lend(__left, __left_len);
+		rope_leaf_ptr __r(_S_rep_cast<_rope_leaf>(__right));
+
+		if (__r)
+			return __gnu_cxx::lexicographical_compare_3way(
+				__lstart, __lend,
+				__r->_M_data, __r->_M_data + __right_len
+			);
+		else {
+			const_iterator __rstart(__right, 0);
+			const_iterator __rend(__right, __right_len);
+			return __gnu_cxx::lexicographical_compare_3way(
+				__lstart, __lend, __rstart, __rend
+			);
+		}
 	}
 }
 
