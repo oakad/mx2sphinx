@@ -223,10 +223,11 @@ rope<_CharT, _Traits, _Alloc>::_S_tree_concat(
 }
 
 template<typename _CharT, typename _Traits, typename _Alloc>
+template<typename _InputIterator>
 typename rope<_CharT, _Traits, _Alloc>::rope_leaf_ptr
 rope<_CharT, _Traits, _Alloc>::_S_leaf_concat_char_iter(
 	typename rope<_CharT, _Traits, _Alloc>::rope_leaf_ptr __r,
-	_CharT const *__iter,
+	_InputIterator __iter,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __len
 )
 {
@@ -242,6 +243,45 @@ rope<_CharT, _Traits, _Alloc>::_S_leaf_concat_char_iter(
 
 	return __result;
 }
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+template<typename _InputIterator>
+typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr
+rope<_CharT, _Traits, _Alloc>::_S_concat_char_iter(
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __r,
+	_InputIterator __iter,
+	typename rope<_CharT, _Traits, _Alloc>::size_type __len
+)
+{
+	if (!__len)
+		return __r;
+
+	rope_leaf_ptr __l(_S_rep_cast<_rope_leaf>(__r));
+
+	if (__l && __l->_M_size + __len <= rope_type::_S_copy_max)
+		return _S_leaf_concat_char_iter(__l, __iter, __len);
+	else {
+		rope_concat_ptr __c(_S_rep_cast<_rope_concat>(__r));
+		if (__c) {
+			__l = _S_rep_cast<_rope_leaf>(__c->_M_right);
+
+			if (__l
+			    && __l->_M_size + __len <= rope_type::_S_copy_max) {
+				rope_leaf_ptr __right(
+					_S_leaf_concat_char_iter(
+						__l, __iter, __len
+					)
+				);
+				return _S_tree_concat(__c->_M_left, __right);
+			}
+		}
+	}
+
+	__l = _rope_leaf::_S_make(__iter, __len, *get_allocator<_Alloc>(__r));
+
+	return _S_tree_concat(__r, __l);
+}
+
 
 template<typename _InputIterator, typename _Size, typename _OutputIterator>
 static bool _out_copy_n(_InputIterator __first, _Size __n,
@@ -273,6 +313,29 @@ rope<_CharT, _Traits, _Alloc>::_S_flatten(
 	);
 
 	return __s + (__end - __begin);
+}
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+_CharT
+rope<_CharT, _Traits, _Alloc>::_S_fetch(
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __r,
+	typename rope<_CharT, _Traits, _Alloc>::size_type __pos
+)
+{
+	_CharT __c;
+
+	_S_apply(
+		__r,
+		std::bind(
+			&_out_copy_n<_CharT const*, size_type, _CharT *>,
+			std::placeholders::_1,
+			std::placeholders::_2,
+			&__c
+		),
+		__pos, __pos + 1
+	);
+
+	return __c;
 }
 
 template<typename _CharT, typename _Traits, typename _Alloc>
@@ -500,7 +563,7 @@ rope<_CharT, _Traits, _Alloc>::_iterator_base::_S_setcache(
 	size_type __cur_start_pos(0);
 
 	// Bit vector marking right turns in the path.
-	unsigned short __dirns(0);
+	unsigned int __dirns(0);
 
 	rope_rep_ptr __cur_rope(__iter._M_root);
 
@@ -553,7 +616,7 @@ rope<_CharT, _Traits, _Alloc>::_iterator_base::_S_setcache_for_incr(
 	int __current_index(__iter._M_path_index);
 	size_type __len(__iter._M_path_end[__current_index]->_M_size);
 	size_type __node_start_pos(__iter._M_leaf_pos);
-	unsigned short __dirns(__iter._M_path_directions);
+	unsigned int __dirns(__iter._M_path_directions);
 
 	if (__iter._M_current_pos - __node_start_pos < __len) {
 		/* More stuff in this leaf, we just didn't cache it. */
