@@ -45,7 +45,11 @@
 #include <ext/algorithm>
 
 template<typename _CharT, typename _Traits, typename _Alloc>
-const unsigned long
+typename rope<_CharT, _Traits, _Alloc>::size_type const
+rope<_CharT, _Traits, _Alloc>::npos = static_cast<size_type>(-1);
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+unsigned long const
 rope<_CharT, _Traits, _Alloc>::_S_min_len[_S_max_rope_depth + 1] = {
       /* 0 */1, /* 1 */2, /* 2 */3, /* 3 */5, /* 4 */8, /* 5 */13, /* 6 */21,
       /* 7 */34, /* 8 */55, /* 9 */89, /* 10 */144, /* 11 */233, /* 12 */377,
@@ -74,14 +78,13 @@ rope<_CharT, _Traits, _Alloc>::_S_rep_ops[_rope_tag::_S_last_tag] = {
 
 template<typename _CharT, typename _Traits, typename _Alloc>
 void rope<_CharT, _Traits, _Alloc>::_S_add_leaf_to_forest(
-	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __r,
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr const &__r,
 	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr *__forest
 )
 {
-	rope_rep_ptr __insertee;
-	rope_rep_ptr __too_tiny;
 	int __i; // forest[0..__i-1] is empty
 	size_type __s(__r->_M_size);
+	rope_rep_ptr __too_tiny;
 
 	for (__i = 0; __s >= _S_min_len[__i + 1]/* not this bucket */; ++__i) {
 		if (0 != __forest[__i]) {
@@ -91,7 +94,7 @@ void rope<_CharT, _Traits, _Alloc>::_S_add_leaf_to_forest(
 		}
 	}
 
-	__insertee = _S_concat_and_set_balanced(__too_tiny, __r);
+	rope_rep_ptr __insertee(_S_concat_and_set_balanced(__too_tiny, __r));
 
 	for (;; ++__i) {
 		if (__forest[__i]) {
@@ -109,7 +112,7 @@ void rope<_CharT, _Traits, _Alloc>::_S_add_leaf_to_forest(
 
 template<typename _CharT, typename _Traits, typename _Alloc>
 void rope<_CharT, _Traits, _Alloc>::_S_add_to_forest(
-	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __r,
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr const &__r,
 	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr *__forest
 )
 {
@@ -126,7 +129,7 @@ void rope<_CharT, _Traits, _Alloc>::_S_add_to_forest(
 template<typename _CharT, typename _Traits, typename _Alloc>
 typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr
 rope<_CharT, _Traits, _Alloc>::_S_balance(
-	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __r
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr const &__r
 )
 {
 	rope_rep_ptr __forest[_S_max_rope_depth + 1];
@@ -155,8 +158,8 @@ rope<_CharT, _Traits, _Alloc>::_S_balance(
 template<typename _CharT, typename _Traits, typename _Alloc>
 typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr
 rope<_CharT, _Traits, _Alloc>::_S_concat(
-	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __l,
-	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __r
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr const &__l,
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr const &__r
 )
 {
 	if (!__l)
@@ -207,8 +210,8 @@ rope<_CharT, _Traits, _Alloc>::_S_concat(
 template<typename _CharT, typename _Traits, typename _Alloc>
 typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr
 rope<_CharT, _Traits, _Alloc>::_S_tree_concat(
-	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __l,
-	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __r
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr const &__l,
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr const &__r
 )
 {
 	rope_concat_ptr __result(_rope_concat::_S_make(__l, __r));
@@ -226,7 +229,7 @@ template<typename _CharT, typename _Traits, typename _Alloc>
 template<typename _InputIterator>
 typename rope<_CharT, _Traits, _Alloc>::rope_leaf_ptr
 rope<_CharT, _Traits, _Alloc>::_S_leaf_concat_char_iter(
-	typename rope<_CharT, _Traits, _Alloc>::rope_leaf_ptr __r,
+	typename rope<_CharT, _Traits, _Alloc>::rope_leaf_ptr const &__r,
 	_InputIterator __iter,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __len
 )
@@ -248,7 +251,7 @@ template<typename _CharT, typename _Traits, typename _Alloc>
 template<typename _InputIterator>
 typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr
 rope<_CharT, _Traits, _Alloc>::_S_concat_char_iter(
-	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __r,
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr const &__r,
 	_InputIterator __iter,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __len
 )
@@ -294,7 +297,7 @@ static bool _out_copy_n(_InputIterator __first, _Size __n,
 template<typename _CharT, typename _Traits, typename _Alloc>
 _CharT *
 rope<_CharT, _Traits, _Alloc>::_S_flatten(
-	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __r,
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr const &__r,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __begin,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __len,
 	_CharT *__s)
@@ -318,7 +321,7 @@ rope<_CharT, _Traits, _Alloc>::_S_flatten(
 template<typename _CharT, typename _Traits, typename _Alloc>
 _CharT
 rope<_CharT, _Traits, _Alloc>::_S_fetch(
-	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __r,
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr const &__r,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __pos
 )
 {
@@ -340,7 +343,7 @@ rope<_CharT, _Traits, _Alloc>::_S_fetch(
 
 template<typename _CharT, typename _Traits, typename _Alloc>
 bool rope<_CharT, _Traits, _Alloc>::_rope_concat::_S_apply(
-	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __r,
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr const &__r,
 	std::function<bool (_CharT const *, size_type)> __f,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __begin,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __end
@@ -373,7 +376,7 @@ bool rope<_CharT, _Traits, _Alloc>::_rope_concat::_S_apply(
 template<typename _CharT, typename _Traits, typename _Alloc>
 typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr
 rope<_CharT, _Traits, _Alloc>::_rope_leaf::_S_substring(
-	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __r,
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr const &__r,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __begin,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __end,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __adj_end
@@ -400,7 +403,7 @@ rope<_CharT, _Traits, _Alloc>::_rope_leaf::_S_substring(
 template<typename _CharT, typename _Traits, typename _Alloc>
 typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr
 rope<_CharT, _Traits, _Alloc>::_rope_concat::_S_substring(
-	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __r,
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr const &__r,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __begin,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __end,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __adj_end
@@ -417,20 +420,16 @@ rope<_CharT, _Traits, _Alloc>::_rope_concat::_S_substring(
 		return rope_type::_S_substring(__right, __begin - __left_len,
 					       __adj_end - __left_len);
 
-	rope_rep_ptr __left_res(
-		rope_type::_S_substring(__left, __begin, __left_len)
-	);
-	rope_rep_ptr __right_res(
+	return _S_concat(
+		rope_type::_S_substring(__left, __begin, __left_len),
 		rope_type::_S_substring(__right, 0, __end - __left_len)
 	);
-
-	return _S_concat(__left_res, __right_res);
 }
 
 template<typename _CharT, typename _Traits, typename _Alloc>
 typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr
 rope<_CharT, _Traits, _Alloc>::_rope_substr::_S_substring(
-	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __r,
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr const &__r,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __begin,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __end,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __adj_end
@@ -458,7 +457,7 @@ rope<_CharT, _Traits, _Alloc>::_rope_substr::_S_substring(
 template<typename _CharT, typename _Traits, typename _Alloc>
 typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr
 rope<_CharT, _Traits, _Alloc>::_rope_func::_S_substring(
-	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __r,
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr const &__r,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __begin,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __end,
 	typename rope<_CharT, _Traits, _Alloc>::size_type __adj_end
@@ -811,8 +810,8 @@ rope<_CharT, _Traits, _Alloc>::_S_dump(
 template<typename _CharT, typename _Traits, typename _Alloc>
 int
 rope<_CharT, _Traits, _Alloc>::_S_compare(
-	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __left,
-	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr __right
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr const &__left,
+	typename rope<_CharT, _Traits, _Alloc>::rope_rep_ptr const &__right
 )
 {
 	if (!__right)
@@ -863,7 +862,7 @@ rope<_CharT, _Traits, _Alloc>::_S_compare(
 
 template<typename _CharT, typename _Traits, typename _Alloc>
 rope<_CharT, _Traits, _Alloc>::rope(size_type __n, _CharT __c,
-				    _Alloc &&__a)
+				    _Alloc __a)
 : _M_treeplus(rope_rep_ptr(), __a)
 {
 	typedef rope<_CharT, _Traits, _Alloc> rope_type;
@@ -917,6 +916,43 @@ rope<_CharT, _Traits, _Alloc>::rope(size_type __n, _CharT __c,
 		__result = __remainder_rope;
 
 	std::get<0>(this->_M_treeplus) = std::get<0>(__result._M_treeplus);
+}
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+typename rope<_CharT, _Traits, _Alloc>::size_type
+rope<_CharT, _Traits, _Alloc>::find(
+	_CharT __c,
+	typename rope<_CharT, _Traits, _Alloc>::size_type __pos
+) const
+{
+	const_iterator __result(
+		std::search_n(const_begin() + __pos, const_end(), 1, __c)
+	);
+	size_type __result_pos(__result.index());
+
+	if (__result_pos == size())
+		__result_pos = npos;
+
+	return __result_pos;
+}
+
+template<typename _CharT, typename _Traits, typename _Alloc>
+typename rope<_CharT, _Traits, _Alloc>::size_type
+rope<_CharT, _Traits, _Alloc>::find(
+	_CharT const *__s,
+	typename rope<_CharT, _Traits, _Alloc>::size_type __pos
+) const
+{
+	const_iterator __result(
+		std::search(const_begin() + __pos, const_end(),
+			    __s, __s + traits_type::length(__s))
+	);
+	size_type __result_pos(__result.index());
+
+	if (__result_pos == size())
+		__result_pos = npos;
+
+	return __result_pos;
 }
 
 template<typename _CharT, typename _Traits, typename _Alloc>

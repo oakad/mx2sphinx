@@ -434,16 +434,16 @@ template<typename _Tp, typename... _Args>
 counted_ptr<_Tp> make_counted(_Args&&... __args);
 
 template<typename _Tp1, typename _Tp2>
-counted_ptr<_Tp1> static_pointer_cast(counted_ptr<_Tp2> __p);
+counted_ptr<_Tp1> static_pointer_cast(counted_ptr<_Tp2> const &__p);
 
 template<typename _Tp1, typename _Tp2>
-counted_ptr<_Tp1> const_pointer_cast(counted_ptr<_Tp2> __p);
+counted_ptr<_Tp1> const_pointer_cast(counted_ptr<_Tp2> const &__p);
 
 template<typename _Tp1, typename _Tp2>
-counted_ptr<_Tp1> dynamic_pointer_cast(counted_ptr<_Tp2> __p);
+counted_ptr<_Tp1> dynamic_pointer_cast(counted_ptr<_Tp2> const &__p);
 
 template<typename _Alloc, typename _Tp>
-_Alloc *get_allocator(counted_ptr<_Tp> __p);
+_Alloc *get_allocator(counted_ptr<_Tp> const &__p);
 
 template<typename _Tp>
 struct counted_ptr
@@ -725,16 +725,22 @@ public:
 	friend counted_ptr<_Tp1> make_counted(_Args&&... __args);
 
 	template<typename _Tp1, typename _Tp2>
-	friend counted_ptr<_Tp1> static_pointer_cast(counted_ptr<_Tp2> __p);
+	friend counted_ptr<_Tp1> static_pointer_cast(
+		counted_ptr<_Tp2> const &__p
+	);
 
 	template<typename _Tp1, typename _Tp2>
-	friend counted_ptr<_Tp1> const_pointer_cast(counted_ptr<_Tp2> __p);
+	friend counted_ptr<_Tp1> const_pointer_cast(
+		counted_ptr<_Tp2> const &__p
+	);
 
 	template<typename _Tp1, typename _Tp2>
-	friend counted_ptr<_Tp1> dynamic_pointer_cast(counted_ptr<_Tp2> __p);
+	friend counted_ptr<_Tp1> dynamic_pointer_cast(
+		counted_ptr<_Tp2> const &__p
+	);
 
 	template<typename _Alloc>
-	friend _Alloc *get_allocator(counted_ptr<_Tp> __p)
+	friend _Alloc *get_allocator(counted_ptr<_Tp> const &__p)
 	{
 		return static_cast<_Alloc *>(
 			__p._M_get_allocator(typeid(_Alloc))
@@ -870,7 +876,7 @@ counted_ptr<_Tp> make_counted(_Args&&... __args)
 }
 
 template<typename _Tp1, typename _Tp2>
-counted_ptr<_Tp1> static_pointer_cast(counted_ptr<_Tp2> __p)
+counted_ptr<_Tp1> static_pointer_cast(counted_ptr<_Tp2> const &__p)
 {
 	if (__p._M_ptr != 0)
 		return counted_ptr<_Tp1>(
@@ -884,7 +890,7 @@ counted_ptr<_Tp1> static_pointer_cast(counted_ptr<_Tp2> __p)
 }
 
 template<typename _Tp1, typename _Tp2>
-counted_ptr<_Tp1> const_pointer_cast(counted_ptr<_Tp2> __p)
+counted_ptr<_Tp1> const_pointer_cast(counted_ptr<_Tp2> const &__p)
 {
 	if (__p._M_ptr != 0)
 		return counted_ptr<_Tp1>(
@@ -898,7 +904,7 @@ counted_ptr<_Tp1> const_pointer_cast(counted_ptr<_Tp2> __p)
 }
 
 template<typename _Tp1, typename _Tp2>
-counted_ptr<_Tp1> dynamic_pointer_cast(counted_ptr<_Tp2> __p)
+counted_ptr<_Tp1> dynamic_pointer_cast(counted_ptr<_Tp2> const &__p)
 {
 	if (dynamic_cast<_Tp1 *>(__p._M_ptr) != 0)
 		return static_pointer_cast(__p);

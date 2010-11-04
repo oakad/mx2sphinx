@@ -66,6 +66,8 @@ public:
 	typedef std::reverse_iterator<iterator>       reverse_iterator;
 	typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
 
+	static size_type const npos;
+
 protected:
 	/* Useful named constants */
 	enum
@@ -108,7 +110,7 @@ protected:
 		_S_last_tag
 	};
 
-	static const unsigned long _S_min_len[_S_max_rope_depth + 1];
+	static unsigned long const _S_min_len[_S_max_rope_depth + 1];
 
 	struct _rope_rep;
 	struct _rope_leaf;
@@ -131,18 +133,18 @@ protected:
 	struct _rope_rep_ops
 	{
 		bool (*apply)(
-			rope_rep_ptr __r,
+			rope_rep_ptr const &__r,
 			std::function<bool (_CharT const *, size_type)> __f,
 			size_type __begin, size_type __end
 		);
 
 		rope_rep_ptr (*substring)(
-			rope_rep_ptr __r, size_type __begin,
+			rope_rep_ptr const &__r, size_type __begin,
 			size_type __end, size_type __adj_end
 		);
 	};
 
-	static const _rope_rep_ops _S_rep_ops[_rope_tag::_S_last_tag];
+	static _rope_rep_ops const _S_rep_ops[_rope_tag::_S_last_tag];
 
 	/**
 	 * @brief _rope_rep implementation cast.
@@ -152,7 +154,7 @@ protected:
 	 * (compared to generic dynamic_cast<>).
 	 */
 	template <typename _Tp1, typename _Tp2>
-	static counted_ptr<_Tp1> _S_rep_cast(counted_ptr<_Tp2> __p)
+	static counted_ptr<_Tp1> _S_rep_cast(counted_ptr<_Tp2> const &__p)
 	{
 		if ((_Tp1::_S_ref_tag == __p->_M_tag)
 		    || (_Tp1::_S_ref_tag == _rope_tag::_S_null))
@@ -171,7 +173,7 @@ protected:
 		size_type _M_size;
 
 		static bool _S_apply(
-			rope_rep_ptr __r,
+			rope_rep_ptr const &__r,
 			std::function<bool (_CharT const *, size_type)> __f,
 			size_type __begin, size_type __end
 		)
@@ -180,8 +182,8 @@ protected:
 		}
 
 		static rope_rep_ptr _S_substring(
-			rope_rep_ptr __r, size_type __begin, size_type __end,
-			size_type __adj_end
+			rope_rep_ptr const &__r, size_type __begin,
+			size_type __end, size_type __adj_end
 		)
 		{
 			return rope_rep_ptr();
@@ -230,7 +232,7 @@ protected:
 		}
 
 		static rope_leaf_ptr _S_make(size_type __len,
-					     _Alloc &&__a)
+					     _Alloc __a)
 		{
 			return allocate_counted<_rope_leaf>(
 				__a,
@@ -242,7 +244,7 @@ protected:
 		}
 
 		static rope_leaf_ptr _S_make(size_type __n, _CharT __c,
-					     _Alloc &&__a)
+					     _Alloc __a)
 		{
 			return allocate_counted<_rope_leaf>(
 				__a,
@@ -254,7 +256,7 @@ protected:
 		}
 
 		static rope_leaf_ptr _S_make(_CharT const *__s, size_type __len,
-					     _Alloc &&__a)
+					     _Alloc __a)
 		{
 			return allocate_counted<_rope_leaf>(
 				__a,
@@ -266,7 +268,7 @@ protected:
 		}
 
 		static bool _S_apply(
-			rope_rep_ptr __r,
+			rope_rep_ptr const &__r,
 			std::function<bool (_CharT const *, size_type)> __f,
 			size_type __begin, size_type __end
 		)
@@ -276,8 +278,8 @@ protected:
 		}
 
 		static rope_rep_ptr _S_substring(
-			rope_rep_ptr __r, size_type __begin, size_type __end,
-			size_type __adj_end
+			rope_rep_ptr const &__r, size_type __begin,
+			size_type __end, size_type __adj_end
 		);
 	};
 
@@ -288,7 +290,7 @@ protected:
 		rope_rep_ptr _M_left;
 		rope_rep_ptr _M_right;
 
-		_rope_concat(rope_rep_ptr __l, rope_rep_ptr __r)
+		_rope_concat(rope_rep_ptr const &__l, rope_rep_ptr const &__r)
 		: _rope_rep(
 			_S_ref_tag,
 			std::max(__l->_M_depth, __r->_M_depth) + 1,
@@ -297,30 +299,30 @@ protected:
 		 _M_left(__l), _M_right(__r)
 		{}
 
-		static rope_concat_ptr _S_make(rope_rep_ptr __l,
-					       rope_rep_ptr __r,
-					       _Alloc &&__a)
+		static rope_concat_ptr _S_make(rope_rep_ptr const &__l,
+					       rope_rep_ptr const &__r,
+					       _Alloc __a)
 		{
 			return allocate_counted<_rope_concat>(
 				__a, __l, __r
 			);
 		}
 
-		static rope_concat_ptr _S_make(rope_rep_ptr __l,
-					       rope_rep_ptr __r)
+		static rope_concat_ptr _S_make(rope_rep_ptr const &__l,
+					       rope_rep_ptr const &__r)
 		{
 			return _S_make(__l, __r, *get_allocator<_Alloc>(__l));
 		}
 
 		static bool _S_apply(
-			rope_rep_ptr __r,
+			rope_rep_ptr const &__r,
 			std::function<bool (_CharT const *, size_type)> __f,
 			size_type __begin, size_type __end
 		);
 
 		static rope_rep_ptr _S_substring(
-			rope_rep_ptr __r, size_type __begin, size_type __end,
-			size_type __adj_end
+			rope_rep_ptr const &__r, size_type __begin,
+			size_type __end, size_type __adj_end
 		);
 	};
 
@@ -331,15 +333,15 @@ protected:
 		rope_rep_ptr _M_base;
 		size_type    _M_start;
 
-		_rope_substr(rope_rep_ptr __base, size_type __start,
+		_rope_substr(rope_rep_ptr const &__base, size_type __start,
 			     size_type __len)
 		: _rope_rep(_S_ref_tag, 0, true, __len), _M_base(__base),
 		  _M_start(__start)
 		{}
 
 		static rope_substr_ptr _S_make(
-			rope_rep_ptr __base, size_type __start,
-			size_type __len, _Alloc &&__a)
+			rope_rep_ptr const &__base, size_type __start,
+			size_type __len, _Alloc __a)
 		{
 			return allocate_counted<_rope_substr>(
 				__a, __base, __start, __len
@@ -347,7 +349,7 @@ protected:
 		}
 
 		static bool _S_apply(
-			rope_rep_ptr __r,
+			rope_rep_ptr const &__r,
 			std::function<bool (_CharT const *, size_type)> __f,
 			size_type __begin, size_type __end
 		)
@@ -362,8 +364,8 @@ protected:
 		}
 
 		static rope_rep_ptr _S_substring(
-			rope_rep_ptr __r, size_type __begin, size_type __end,
-			size_type __adj_end
+			rope_rep_ptr const &__r, size_type __begin,
+			size_type __end, size_type __adj_end
 		);
 	};
 
@@ -381,7 +383,7 @@ protected:
 		 * before application of __f.
 		 */
 		static bool _S_apply(
-			rope_rep_ptr __r,
+			rope_rep_ptr const &__r,
 			std::function<bool (_CharT const *, size_type)> __f,
 			size_type __begin, size_type __end
 		)
@@ -402,8 +404,8 @@ protected:
 
 
 		static rope_rep_ptr _S_substring(
-			rope_rep_ptr __r, size_type __begin, size_type __end,
-			size_type __adj_end
+			rope_rep_ptr const &__r, size_type __begin,
+			size_type __end, size_type __adj_end
 		);
 	};
 
@@ -478,7 +480,7 @@ protected:
 		_iterator_base()
 		{}
 
-		_iterator_base(rope_rep_ptr __root, size_type __pos)
+		_iterator_base(rope_rep_ptr const &__root, size_type __pos)
 		: _M_current_pos(__pos), _M_root(__root), _M_buf_cur(0)
 		{}
 
@@ -497,13 +499,13 @@ protected:
 	/**
 	 * @brief Definition of the balanced sub-tree.
 	 */
-	static bool _S_is_balanced(rope_rep_ptr __r)
+	static bool _S_is_balanced(rope_rep_ptr const &__r)
 	{
 		return (__r->_M_size >= _S_min_len[__r->_M_depth]);
 	}
 
-	static rope_rep_ptr _S_concat_and_set_balanced(rope_rep_ptr __l,
-						       rope_rep_ptr __r)
+	static rope_rep_ptr _S_concat_and_set_balanced(rope_rep_ptr const &__l,
+						       rope_rep_ptr const &__r)
 	{
 		rope_rep_ptr __result(_S_concat(__l, __r));
 
@@ -516,7 +518,7 @@ protected:
 	/**
 	 * @brief Add __r to forest, assuming __r is already balanced.
 	 */
-	static void _S_add_leaf_to_forest(rope_rep_ptr __r,
+	static void _S_add_leaf_to_forest(rope_rep_ptr const &__r,
 					  rope_rep_ptr *__forest);
 
 	/**
@@ -524,7 +526,8 @@ protected:
 	 *
 	 * Used only by _S_balance.
 	 */
-	static void _S_add_to_forest(rope_rep_ptr __r, rope_rep_ptr *__forest);
+	static void _S_add_to_forest(rope_rep_ptr const &__r,
+				     rope_rep_ptr *__forest);
 
 	/**
 	 * @brief The basic rebalancing operation.
@@ -532,12 +535,13 @@ protected:
 	 * Logically copies the rope. The result is within height 2 of
 	 * balanced by the above definition.
 	 */
-	static rope_rep_ptr _S_balance(rope_rep_ptr __r);
+	static rope_rep_ptr _S_balance(rope_rep_ptr const &__r);
 
 	/**
 	 * @brief General concatenation on rope_rep.
 	 */
-	static rope_rep_ptr _S_concat(rope_rep_ptr __l, rope_rep_ptr __r);
+	static rope_rep_ptr _S_concat(rope_rep_ptr const &__l,
+				      rope_rep_ptr const &__r);
 
 	/**
 	 * @brief Concatenation of nonempty strings.
@@ -545,13 +549,14 @@ protected:
 	 * Always builds a concatenation node.
 	 * Rebalances if the result is too deep.
 	 */
-	static rope_rep_ptr _S_tree_concat(rope_rep_ptr __l, rope_rep_ptr __r);
+	static rope_rep_ptr _S_tree_concat(rope_rep_ptr const &__l,
+					   rope_rep_ptr const &__r);
 
 	/**
 	 * @brief Concatenate by copying leaf.
 	 */
 	template <typename _InputIterator>
-	static rope_leaf_ptr _S_leaf_concat_char_iter(rope_leaf_ptr __r,
+	static rope_leaf_ptr _S_leaf_concat_char_iter(rope_leaf_ptr const &__r,
 						      _InputIterator __iter,
 						      size_type __len);
 
@@ -559,7 +564,7 @@ protected:
 	 * @brief Concatenate rope and input iterator, copying __s.
 	 */
 	template <typename _InputIterator>
-	static rope_rep_ptr _S_concat_char_iter(rope_rep_ptr __r,
+	static rope_rep_ptr _S_concat_char_iter(rope_rep_ptr const &__r,
 						_InputIterator __iter,
 						size_type __len);
 
@@ -568,7 +573,7 @@ protected:
 	 *
 	 * @return Pointer to the end of the array.
 	 */
-	static _CharT *_S_flatten(rope_rep_ptr __r, size_type __begin,
+	static _CharT *_S_flatten(rope_rep_ptr const &__r, size_type __begin,
 				  size_type __len, _CharT *__s);
 
 	/**
@@ -576,7 +581,7 @@ protected:
 	 *
 	 * @return Pointer to the end of the array (__s + __r->_M_size).
 	 */
-	static _CharT *_S_flatten(rope_rep_ptr __r, _CharT *__s)
+	static _CharT *_S_flatten(rope_rep_ptr const &__r, _CharT *__s)
 	{
 		return _S_flatten(__r, 0, __r->_M_size, __s);
 	}
@@ -584,7 +589,7 @@ protected:
 	/**
 	 * @brief Retrieve a character at the indicated position.
 	 */
-	static _CharT _S_fetch(rope_rep_ptr __r, size_type __pos);
+	static _CharT _S_fetch(rope_rep_ptr const &__r, size_type __pos);
 
 	/**
 	 * @brief Construct rope tree representing a substring of __r.
@@ -592,8 +597,9 @@ protected:
 	 * Rope will be recursively traversed because of rope_concat_ptr and
 	 * rope_substr_ptr semantics.
 	 */
-	static rope_rep_ptr _S_substring(rope_rep_ptr __r, size_type __begin,
-					 size_type __end)
+	static rope_rep_ptr _S_substring(
+		rope_rep_ptr const &__r, size_type __begin, size_type __end
+	)
 	{
 		if (!__r)
 			return __r;
@@ -621,7 +627,7 @@ protected:
 	 * rope_substr_ptr semantics.
 	 */
 	static bool _S_apply(
-		rope_rep_ptr __r,
+		rope_rep_ptr const &__r,
 		std::function<bool (_CharT const *, size_type)> __f,
 		size_type __begin, size_type __end
 	)
@@ -634,12 +640,32 @@ protected:
 	}
 
 	/**
+	 * @brief Replace a value range within __old with contents of __r.
+	 */
+	static rope_rep_ptr _S_replace(rope_rep_ptr const &__old, size_type __b,
+				       size_type __e, rope_rep_ptr const &__r)
+	{
+		if (!__old)
+			return __r;
+
+		rope_rep_ptr __left(_S_substring(__old, 0, __b));
+		rope_rep_ptr __right(
+			_S_substring(__old, __e, __old->_M_size)
+		);
+
+		if (!__r)
+			return _S_concat(__left, __right);
+		else
+			return _S_concat(_S_concat(__left, __r), __right);
+	}
+
+	/**
 	 * @brief Slightly faster rope subtree 3 way compare.
 	 *
 	 * This function will bypass the use of rope iterators if one or both
 	 * subtrees are single leafs.
 	 */
-	int _S_compare(rope_rep_ptr __left, rope_rep_ptr __right);
+	int _S_compare(rope_rep_ptr const &__left, rope_rep_ptr const &__right);
 
 	/**
 	 * @brief Dump internal rope structure to the supplied ostream.
@@ -653,31 +679,319 @@ protected:
 	std::tuple<rope_rep_ptr, allocator_type> _M_treeplus;
 
 private:
-	rope(rope_rep_ptr __t, _Alloc &&__a = _Alloc())
+	rope(rope_rep_ptr const &__t, _Alloc __a = _Alloc())
 	: _M_treeplus(__t, __a)
 	{}
-
-	rope(rope_rep_ptr __t, _Alloc const &__a)
+/*
+	rope(rope_rep_ptr const &__t, _Alloc const &__a)
 	: _M_treeplus(__t, __a)
 	{}
-
+*/
 public:
 	struct reference
 	{
+		reference(rope_type &__r, size_type __pos)
+		: _M_root(__r), _M_pos(__pos), _M_current_valid(false)
+		{}
+
+		reference(reference const &__ref)
+		: _M_root(__ref._M_root), _M_pos(__ref._M_pos),
+		  _M_current_valid(false), _M_current(__ref._M_current)
+		{}
+
+		reference(rope_type &__r, size_type __pos, _CharT __c)
+		: _M_root(__r), _M_pos(__pos), _M_current_valid(true),
+		  _M_current(__c)
+		{}
+
+		operator _CharT () const
+		{
+			if (_M_current_valid)
+				return _M_current;
+			else
+				return rope_type::_S_fetch(
+					std::get<0>(_M_root._M_treeplus),
+					_M_pos
+				);
+		}
+
+		reference &operator=(_CharT __c)
+		{
+			rope_rep_ptr __old(std::get<0>(_M_root._M_treeplus));
+
+			rope_rep_ptr __left(
+				rope_type::_S_substring(__old, 0, _M_pos)
+			);
+			rope_rep_ptr __right(
+				rope_type::_S_substring(__old, _M_pos + 1,
+							__old->_M_size)
+			);
+
+			std::get<0>(_M_root._M_treeplus) = rope_type::_S_concat(
+				rope_type::_S_concat_char_iter(__left, &__c, 1),
+				__right
+			);
+
+			return *this;
+		}
+
+		pointer operator&() const
+		{
+			return pointer(*this);
+		}
+
+		reference &operator=(reference const &__c)
+		{
+			return operator=(_CharT(__c));
+		}
+
+	private:
+		friend struct pointer;
+
+		rope_type   &_M_root;
+		size_type    _M_pos;
+		bool         _M_current_valid;
+		_CharT       _M_current;
 	};
 
 	struct pointer
 	{
+		pointer(reference const &__ref)
+		: _M_root(&__ref._M_root), _M_pos(__ref._M_pos)
+		{}
+
+		pointer(pointer const &__ptr)
+		: _M_root(&__ptr._M_root), _M_pos(__ptr._M_pos)
+		{}
+
+		pointer()
+		: _M_root(0), _M_pos(0)
+		{}
+
+		pointer &operator=(pointer const &__ptr)
+		{
+			_M_root = __ptr._M_root;
+			_M_pos = __ptr._M_pos;
+			return *this;
+		}
+
+		template<typename _CharT2, typename _Traits2, typename _Alloc2>
+		friend bool operator==(
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::pointer const &__x,
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::pointer const &__y
+		)
+		{
+			return (__x._M_pos == __y._M_pos)
+				&& (__x._M_root == __y._M_root);
+		}
+
+		reference operator*() const
+		{
+			return reference(_M_root, _M_pos);
+		}
+
+	private:
+		rope_type   *_M_root;
+		size_type    _M_pos;
 	};
 
 	struct const_iterator : public _iterator_base
 	{
 		typedef std::random_access_iterator_tag iterator_category;
 		typedef rope_type::value_type           value_type;
-		typedef rope_type::reference            reference;
-		typedef rope_type::pointer              pointer;
+		typedef _CharT                          reference;
+		typedef _CharT const *                  pointer;
 		typedef rope_type::size_type            size_type;
 		typedef rope_type::difference_type      difference_type;
+
+		const_iterator()
+		{};
+
+		const_iterator(const_iterator const &__iter)
+		: _iterator_base(__iter)
+		{}
+
+		const_iterator(iterator const &__iter)
+		: _iterator_base(__iter)
+		{}
+
+		const_iterator(rope_type const &__r, size_type __pos)
+		: _iterator_base(std::get<0>(__r._M_treeplus), __pos)
+		{}
+
+		const_iterator &operator=(const_iterator const &__iter)
+		{
+			if (__iter._M_buf_cur)
+				_iterator_base::operator=(__iter);
+			else
+			{
+				this->_M_current_pos = __iter._M_current_pos;
+				this->_M_root = __iter._M_root;
+				this->_M_buf_cur = 0;
+			}
+
+			return(*this);
+		}
+
+		reference operator*()
+		{
+			if (!this->_M_buf_cur)
+				this->_S_setcache(*this);
+
+			return *this->_M_buf_cur;
+		}
+
+		reference operator*() const
+		{
+			return *const_cast<const_iterator &>(*this);
+		}
+
+		const_iterator &operator++()
+		{
+			_CharT const *__next(this->_M_buf_cur + 1);
+
+			if (this->_M_buf_cur && __next < this->_M_buf_end) {
+				this->_M_buf_cur = __next;
+				++(this->_M_cur_pos);
+			} else
+				this->_M_incr(1);
+
+			return *this;
+		}
+
+		const_iterator &operator+=(difference_type __n)
+		{
+			if (__n >= 0)
+				_M_incr(__n);
+			else
+				_M_decr(-__n);
+
+			return *this;
+		}
+
+		const_iterator &operator--()
+		{
+			this->_M_decr(1);
+			return *this;
+		}
+
+		const_iterator &operator-=(difference_type __n)
+		{
+			if (__n >= 0)
+				this->_M_decr(__n);
+			else
+				this->_M_incr(-__n);
+
+			return *this;
+		}
+
+		const_iterator operator++(int)
+		{
+			size_type __old_pos(this->_M_current_pos);
+			this->_M_incr(1);
+			return const_iterator(this->_M_root, __old_pos);
+		}
+
+		const_iterator operator--(int)
+		{
+			size_type __old_pos(this->_M_current_pos);
+			this->_M_decr(1);
+			return const_iterator(this->_M_root, __old_pos);
+		}
+
+		template<typename _CharT2, typename _Traits2, typename _Alloc2>
+		friend typename rope<_CharT2, _Traits2, _Alloc2>::const_iterator
+		operator-(
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::const_iterator const &__iter,
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::difference_type __n
+		)
+		{
+			return const_iterator(
+				__iter._M_root, __iter._M_current_pos - __n
+			);
+		}
+
+		template<typename _CharT2, typename _Traits2, typename _Alloc2>
+		friend typename rope<_CharT2, _Traits2, _Alloc2>::const_iterator
+		operator+(
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::const_iterator const &__iter,
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::difference_type __n
+		)
+		{
+			return const_iterator(
+				__iter._M_root, __iter._M_current_pos + __n
+			);
+		}
+
+		template<typename _CharT2, typename _Traits2, typename _Alloc2>
+		friend typename rope<_CharT2, _Traits2, _Alloc2>::const_iterator
+		operator+(
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::difference_type __n,
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::const_iterator const &__iter
+		)
+		{
+			return const_iterator(
+				__iter._M_root, __iter._M_current_pos + __n
+			);
+		}
+
+		reference operator[](size_type __n)
+		{
+			return rope_type::_S_fetch(
+				this->_M_root, this->_M_current_pos + __n
+			);
+		}
+
+		template<typename _CharT2, typename _Traits2, typename _Alloc2>
+		friend bool operator==(
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::const_iterator const &__x,
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::const_iterator const &__y
+		)
+		{
+			return (__x._M_current_pos == __y._M_current_pos)
+			       && (__x._M_root == __y._M_root);
+		}
+
+		template<typename _CharT2, typename _Traits2, typename _Alloc2>
+		friend bool operator<(
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::const_iterator const &__x,
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::const_iterator const &__y
+		)
+		{
+			return __x._M_current_pos < __y._M_current_pos;
+		}
+
+		template<typename _CharT2, typename _Traits2, typename _Alloc2>
+		friend typename rope<_CharT2, _Traits2, _Alloc2>
+		::difference_type operator-(
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::const_iterator const &__x,
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::const_iterator const &__y
+		)
+		{
+			return static_cast<difference_type>(__x._M_current_pos)
+			       - static_cast<difference_type>(
+					__y._M_current_pos
+				);
+		}
+
+	protected:
+		const_iterator(rope_rep_ptr const &__root, size_type __pos)
+		: _iterator_base(__root, __pos)
+		{}
 	};
 
 	struct iterator : public _iterator_base
@@ -701,7 +1015,7 @@ public:
 				  std::get<0>(__r._M_treeplus));
 	}
 
-	rope(_CharT const *__s, _Alloc &&__a = _Alloc())
+	rope(_CharT const *__s, _Alloc __a = _Alloc())
 	: _M_treeplus(rope_rep_ptr(), __a)
 	{
 		if (__s && traits_type::length(__s)) {
@@ -714,7 +1028,7 @@ public:
 		}
 	}
 
-	rope(_CharT const *__s, size_type __len, _Alloc &&__a = _Alloc())
+	rope(_CharT const *__s, size_type __len, _Alloc __a = _Alloc())
 	: _M_treeplus(rope_rep_ptr(), __a)
 	{
 		if (__s && __len) {
@@ -724,7 +1038,7 @@ public:
 	}
 
 	template <typename _InputIterator>
-	rope(_InputIterator __b, _InputIterator __e, _Alloc &&__a = _Alloc())
+	rope(_InputIterator __b, _InputIterator __e, _Alloc __a = _Alloc())
 	: _M_treeplus(rope_rep_ptr(), __a)
 	{
 		size_type __len(__e - __b);
@@ -737,38 +1051,38 @@ public:
 	}
 
 	rope(const_iterator const &__b, const_iterator const &__e,
-	     _Alloc &&__a = _Alloc())
+	     _Alloc __a = _Alloc())
 	: _M_treeplus(_S_substring(__b._M_root, __b._M_current_pos,
 				   __e._M_current_pos), __a)
 	{}
 
 	rope(iterator const &__b, iterator const &__e,
-	     _Alloc &&__a = _Alloc())
+	     _Alloc __a = _Alloc())
 	: _M_treeplus(_S_substring(__b._M_root, __b._M_current_pos,
 				   __e._M_current_pos), __a)
 	{}
 
-	rope(_CharT __c, _Alloc &&__a = _Alloc())
+	rope(_CharT __c, _Alloc __a = _Alloc())
 	: _M_treeplus(_rope_leaf::_S_make(1, __c, __a), __a)
 	{}
 
-	rope(size_type __n, _CharT __c, _Alloc &&__a = _Alloc());
+	rope(size_type __n, _CharT __c, _Alloc __a = _Alloc());
 
-	rope(_Alloc &&__a = _Alloc())
+	rope(_Alloc __a = _Alloc())
 	: _M_treeplus(rope_rep_ptr(), __a)
 	{}
 
 	rope(std::function<void (size_type, size_type, _CharT *)> __fn,
-	     size_t __len, _Alloc &&__a = _Alloc())
+	     size_type __len, _Alloc __a = _Alloc())
 	: _M_treeplus(_rope_func::_S_make(__fn, __len, __a), __a)
 	{}
 
-	rope(rope const &__r, _Alloc &&__a = _Alloc())
-	: _M_treeplus(std::get<0>(__r._M_treeplus), __a)
+	rope(rope const &__r)
+	: _M_treeplus(__r._M_treeplus)
 	{}
 
-	rope(rope &&__r, _Alloc &&__a = _Alloc())
-	: _M_treeplus(std::get<0>(__r._M_treeplus), __a)
+	rope(rope &&__r)
+	: _M_treeplus(__r._M_treeplus)
 	{
 		std::get<0>(__r._M_treeplus).reset();
 	}
@@ -853,7 +1167,7 @@ public:
 
 	size_type copy(_CharT *__s, size_type __n, size_type __pos = 0) const
 	{
-		size_type __size(this->size());
+		size_type __size(size());
 		size_type __len(__pos + __n > __size ? __size - __pos : __n);
 
 		_S_flatten(std::get<0>(_M_treeplus), __pos, __len, __s);
@@ -863,8 +1177,9 @@ public:
 	class _rope_dumper
 	{
 		friend class rope;
+		rope_rep_ptr _M_r;
 
-		_rope_dumper(rope_rep_ptr __r)
+		_rope_dumper(rope_rep_ptr const &__r)
 		: _M_r(__r)
 		{}
 
@@ -882,8 +1197,6 @@ public:
 		{
 			return __d._M_dump(__os);
 		}
-
-		rope_rep_ptr _M_r;
 	};
 
 	/**
@@ -954,6 +1267,13 @@ public:
 
 	size_type length() const
 	{
+		return size();
+	}
+
+	size_type capacity() const
+	{
+		// Any modification to the rope will result in memory
+		// allocation.
 		return size();
 	}
 
@@ -1064,6 +1384,426 @@ public:
 		_M_treeplus.swap(__r._M_treeplus);
 	}
 
+	void insert(size_type __p, rope const &__r)
+	{
+		std::get<0>(_M_treeplus) = _S_replace(
+			std::get<0>(_M_treeplus), __p, __p,
+			std::get<0>(__r._M_treeplus)
+		);
+	}
+
+	void insert(size_type __p, size_type __n, _CharT __c)
+	{
+		rope_type __r(__n, __c, std::get<1>(_M_treeplus));
+		insert(__p, __r);
+	}
+
+	template <typename _InputIterator>
+	void insert(size_type __p, _InputIterator __iter, size_type __len)
+	{
+		rope_rep_ptr __left(std::get<0>(_M_treeplus), 0, __p);
+		rope_rep_ptr __right(std::get<0>(_M_treeplus), __p, size());
+
+		std::get<0>(_M_treeplus) = _S_concat(
+			_S_concat_char_iter(__left, __iter, __len),
+			__right
+		);
+	}
+
+	void insert(size_type __p, _CharT const *__s)
+	{
+		insert(__p, __s, traits_type::length(__s));
+	}
+
+	void insert(size_type __p, _CharT __c)
+	{
+		insert(__p, &__c, 1);
+	}
+
+	template <typename _InputIterator>
+	void insert(size_type __p, _InputIterator __b, _InputIterator __e)
+	{
+		rope_type __r(__b, __e, std::get<1>(_M_treeplus));
+		insert(__p, __r);
+	}
+
+	void insert(size_type __p, const_iterator const &__b,
+		    const_iterator const &__e)
+	{
+		rope_type __r(__b, __e, std::get<1>(_M_treeplus));
+		insert(__p, __r);
+	}
+
+	void insert(size_type __p, iterator const &__b, iterator const &__e)
+	{
+		rope_type __r(__b, __e, std::get<1>(_M_treeplus));
+		insert(__p, __r);
+	}
+
+	void replace(size_type __p, size_type __n, rope const &__r)
+	{
+		std::get<0>(_M_treeplus) = _S_replace(
+			std::get<0>(_M_treeplus), __p, __p + __n,
+			std::get<0>(__r._M_treeplus)
+		);
+	}
+
+	template <typename _InputIterator>
+	void replace(size_type __p, size_type __n, _InputIterator __iter,
+		     size_type __len)
+	{
+		rope_type __r(__iter, __len, std::get<1>(__r._M_treeplus));
+		replace(__p, __n, __r);
+	}
+
+	void replace(size_type __p, size_type __n, _CharT __c)
+	{
+		rope_type __r(__c, std::get<1>(__r._M_treeplus));
+		replace(__p, __n, __r);
+	}
+
+	void replace(size_type __p, size_type __n, _CharT const *__s)
+	{
+		rope_type __r(__s, std::get<1>(__r._M_treeplus));
+		replace(__p, __n, __r);
+	}
+
+	template <typename _InputIterator>
+	void replace(size_type __p, size_type __n, _InputIterator __b,
+		     _InputIterator __e)
+	{
+		rope_type __r(__b, __e, std::get<1>(__r._M_treeplus));
+		replace(__p, __n, __r);
+	}
+
+	void replace(size_type __p, size_type __n, const_iterator const &__b,
+		     const_iterator const &__e)
+	{
+		rope_type __r(__b, __e, std::get<1>(__r._M_treeplus));
+		replace(__p, __n, __r);
+	}
+
+	void replace(size_type __p, size_type __n, iterator const &__b,
+		     iterator const &__e)
+	{
+		rope_type __r(__b, __e, std::get<1>(__r._M_treeplus));
+		replace(__p, __n, __r);
+	}
+
+	void replace(size_type __p, _CharT __c)
+	{
+		iterator __i(this, __p);
+		*__i = __c;
+	}
+
+	void replace(size_type __p, rope const &__r)
+	{
+		replace(__p, 1, __r);
+	}
+
+	template <typename _InputIterator>
+	void replace(size_type __p, _InputIterator __iter, size_type __len)
+	{
+		replace(__p, 1, __iter, __len);
+	}
+
+	void replace(size_type __p, _CharT const *__s)
+	{
+		replace(__p, 1, __s);
+	}
+
+	template <typename _InputIterator>
+	void replace(size_type __p, _InputIterator __b, _InputIterator __e)
+	{
+		replace(__p, 1, __b, __e);
+	}
+
+	void replace(size_type __p, const_iterator const &__b,
+		     const_iterator const &__e)
+	{
+		replace(__p, 1, __b, __e);
+	}
+
+	void replace(size_type __p, iterator const &__b, iterator const &__e)
+	{
+		replace(__p, 1, __b, __e);
+	}
+
+	void erase(size_type __p, size_type __n)
+	{
+		std::get<0>(_M_treeplus) = _S_replace(
+			std::get<0>(_M_treeplus), __p, __p + __n,
+			rope_rep_ptr()
+		);
+	}
+
+	void erase(size_type __p)
+	{
+		erase(__p, __p + 1);
+	}
+
+	iterator insert(iterator const &__p, const rope& __r)
+	{
+		insert(__p.index(), __r);
+		return __p;
+	}
+
+	iterator insert(iterator const &__p, size_type __n, _CharT __c)
+	{
+		insert(__p.index(), __n, __c);
+		return __p;
+	}
+
+	iterator insert(iterator const &__p, _CharT __c)
+	{
+		insert(__p.index(), __c);
+		return __p;
+	}
+
+	iterator insert(iterator const &__p, _CharT const *__s)
+	{
+		insert(__p.index(), __s);
+		return __p;
+	}
+
+	template <typename _InputIterator>
+	iterator insert(iterator const &__p, _InputIterator __i,
+			size_type __len)
+	{
+		insert(__p.index(), __i, __len);
+		return __p;
+	}
+
+	template <typename _InputIterator>
+	iterator insert(iterator const &__p, _InputIterator __b,
+			_InputIterator __e)
+	{
+		insert(__p.index(), __b, __e);
+		return __p;
+	}
+
+	iterator insert(iterator const &__p, const_iterator const &__b,
+			const_iterator const &__e)
+	{
+		insert(__p.index(), __b, __e);
+		return __p;
+	}
+
+	iterator insert(iterator const &__p, iterator const &__b,
+			iterator const &__e)
+	{
+		insert(__p.index(), __b, __e);
+		return __p;
+	}
+
+	void replace(iterator const &__b, iterator const &__e, rope const &__r)
+	{
+		replace(__b.index(), __e.index() - __b.index(), __r);
+	}
+
+	void replace(iterator const &__b, iterator const &__e, _CharT __c)
+	{
+		replace(__b.index(), __e.index() - __b.index(), __c);
+	}
+
+	void replace(iterator const &__b, iterator const &__e,
+		     _CharT const *__s)
+	{
+		replace(__b.index(), __e.index() - __b.index(), __s);
+	}
+
+	template <typename _InputIterator>
+	void replace(iterator const &__b, iterator const &__e,
+		     _InputIterator __i, size_type __len)
+	{
+		replace(__b.index(), __e.index() - __b.index(), __i, __len);
+	}
+
+	template <typename _InputIterator>
+	void replace(iterator const &__b, iterator const &__e,
+		     _InputIterator __i_b, _InputIterator __i_e)
+	{
+		replace(__b.index(), __e.index() - __b.index(), __i_b, __i_e);
+	}
+
+	void replace(iterator const &__b, iterator const &__e,
+		     const_iterator const &__i_b, const_iterator const &__i_e)
+	{
+		replace(__b.index(), __e.index() - __b.index(), __i_b, __i_e);
+	}
+
+	void replace(iterator const &__b, iterator const &__e,
+		     iterator const &__i_b, iterator const &__i_e)
+	{
+		replace(__b.index(), __e.index() - __b.index(), __i_b, __i_e);
+	}
+
+	void replace(iterator const &__p, rope const &__r)
+	{
+		replace(__p.index(), __r);
+	}
+
+	void replace(iterator const &__p, _CharT __c)
+	{
+		replace(__p.index(), __c);
+	}
+
+	void replace(iterator const &__p, _CharT const *__s)
+	{
+		replace(__p.index(), __s);
+	}
+
+	template <typename _InputIterator>
+	void replace(iterator const &__p, _InputIterator __i, size_type __len)
+	{
+		replace(__p.index(), __i, __len);
+	}
+
+	template <typename _InputIterator>
+	void replace(iterator const &__p, _InputIterator __b,
+		     _InputIterator __e)
+	{
+		replace(__p.index(), __b, __e);
+	}
+
+	void replace(iterator const &__p, const_iterator __b,
+		     const_iterator __e)
+	{
+		replace(__p.index(), __b, __e);
+	}
+
+	void replace(iterator const &__p, iterator __b, iterator __e)
+	{
+		replace(__p.index(), __b, __e);
+	}
+
+	iterator erase(iterator const &__b, iterator const &__e)
+	{
+		size_type __b_index(__b.index());
+		erase(__b_index, __e.index() - __b_index);
+		return iterator(this, __b_index);
+	}
+
+	iterator erase(iterator const &__p)
+	{
+		size_type __p_index(__p.index());
+		erase(__p_index, 1);
+		return iterator(this, __p_index);
+	}
+
+	rope substr(size_type __pos, size_type __len = 1) const
+	{
+		return rope_type(
+			_S_substring(
+				std::get<0>(_M_treeplus), __pos,
+				__pos + __len
+			),
+			std::get<1>(_M_treeplus)
+		);
+	}
+
+	rope substr(iterator const &__b, iterator const &__e) const
+	{
+		return rope_type(
+			_S_substring(
+				std::get<0>(_M_treeplus), __b.index(),
+				__e.index()
+			),
+			std::get<1>(_M_treeplus)
+		);
+	}
+
+	rope substr(iterator const &__p) const
+	{
+		size_type __p_index(__p.index());
+
+		return rope_type(
+			_S_substring(
+				std::get<0>(_M_treeplus), __p_index,
+				__p_index + 1
+			),
+			std::get<1>(_M_treeplus)
+		);
+	}
+
+	rope substr(const_iterator const &__b, const_iterator const &__e) const
+	{
+		return rope_type(
+			_S_substring(
+				std::get<0>(_M_treeplus), __b.index(),
+				__e.index()
+			),
+			std::get<1>(_M_treeplus)
+		);
+	}
+
+	rope substr(const_iterator const &__p) const
+	{
+		size_type __p_index(__p.index());
+
+		return rope_type(
+			_S_substring(
+				std::get<0>(_M_treeplus), __p_index,
+				__p_index + 1
+			),
+			std::get<1>(_M_treeplus)
+		);
+	}
+
+	size_type find(_CharT __c, size_type __pos = 0) const;
+
+	size_type find(_CharT const *__s, size_type __pos = 0) const;
+
+	iterator mutable_begin()
+	{
+		return(iterator(this, 0));
+	}
+
+	iterator mutable_end()
+	{
+		return(iterator(this, size()));
+	}
+
+	reverse_iterator mutable_rbegin()
+	{
+		return reverse_iterator(mutable_end());
+	}
+
+	reverse_iterator mutable_rend()
+	{
+		return reverse_iterator(mutable_begin());
+	}
+
+	reference mutable_reference_at(size_type __pos)
+	{
+		return reference(this, __pos);
+	}
+
+	reference operator[] (size_type __pos)
+	{
+		return reference(this, __pos);
+	}
+
+	iterator end()
+	{
+		return mutable_end();
+	}
+
+	iterator begin()
+	{
+		return mutable_begin();
+	}
+
+	reverse_iterator rend()
+	{
+		return mutable_rend();
+	}
+
+	reverse_iterator rbegin()
+	{
+		return mutable_rbegin();
+	}
+
 	template <typename _CharT2, typename _Traits2, typename _Alloc2>
 	friend rope<_CharT2, _Traits2, _Alloc2> operator+(
 		rope<_CharT2, _Traits2, _Alloc2> const &__l,
@@ -1152,8 +1892,33 @@ std::basic_ostream<_CharT, _Traits> &operator<<(
 typedef rope<char> crope;
 typedef rope<wchar_t> wrope;
 
-#ifndef _GLIBCXX_EXPORT_TEMPLATE
+namespace std
+{
+template<>
+struct hash<crope>
+{
+	size_t operator()(crope const &__str) const
+	{
+		size_t __size(__str.size());
+		if (0 == __size)
+			return 0;
+		return 13 * __str[0] + 5 * __str[__size - 1] + __size;
+	}
+};
+
+template<>
+struct hash<wrope>
+{
+	size_t operator()(wrope const &__str) const
+	{
+		size_t __size(__str.size());
+		if (0 == __size)
+			return 0;
+		return 13 * __str[0] + 5 * __str[__size - 1] + __size;
+	}
+};
+} // namespace std
+
 #include <rope.tcc>
-#endif
 
 #endif
