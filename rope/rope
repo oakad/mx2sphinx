@@ -775,6 +775,11 @@ public:
 			return *this;
 		}
 
+		reference operator*() const
+		{
+			return reference(_M_root, _M_pos);
+		}
+
 		template<typename _CharT2, typename _Traits2, typename _Alloc2>
 		friend bool operator==(
 			typename rope<_CharT2, _Traits2, _Alloc2>
@@ -787,9 +792,16 @@ public:
 				&& (__x._M_root == __y._M_root);
 		}
 
-		reference operator*() const
+		template<typename _CharT2, typename _Traits2, typename _Alloc2>
+		friend bool operator!=(
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::pointer const &__x,
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::pointer const &__y
+		)
 		{
-			return reference(_M_root, _M_pos);
+			return (__x._M_pos != __y._M_pos)
+				|| (__x._M_root != __y._M_root);
 		}
 
 	private:
@@ -907,7 +919,7 @@ public:
 			typename rope<_CharT2, _Traits2, _Alloc2>
 			::const_iterator const &__iter,
 			typename rope<_CharT2, _Traits2, _Alloc2>
-			::difference_type __n
+			::const_iterator::difference_type __n
 		)
 		{
 			return const_iterator(
@@ -916,12 +928,27 @@ public:
 		}
 
 		template<typename _CharT2, typename _Traits2, typename _Alloc2>
+		friend typename rope<_CharT2, _Traits2, _Alloc2>
+		::const_iterator::difference_type operator-(
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::const_iterator const &__x,
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::const_iterator const &__y
+		)
+		{
+			return static_cast<difference_type>(__x._M_current_pos)
+			       - static_cast<difference_type>(
+					__y._M_current_pos
+				);
+		}
+
+		template<typename _CharT2, typename _Traits2, typename _Alloc2>
 		friend typename rope<_CharT2, _Traits2, _Alloc2>::const_iterator
 		operator+(
 			typename rope<_CharT2, _Traits2, _Alloc2>
 			::const_iterator const &__iter,
 			typename rope<_CharT2, _Traits2, _Alloc2>
-			::difference_type __n
+			::const_iterator::difference_type __n
 		)
 		{
 			return const_iterator(
@@ -933,7 +960,7 @@ public:
 		friend typename rope<_CharT2, _Traits2, _Alloc2>::const_iterator
 		operator+(
 			typename rope<_CharT2, _Traits2, _Alloc2>
-			::difference_type __n,
+			::const_iterator::difference_type __n,
 			typename rope<_CharT2, _Traits2, _Alloc2>
 			::const_iterator const &__iter
 		)
@@ -963,6 +990,18 @@ public:
 		}
 
 		template<typename _CharT2, typename _Traits2, typename _Alloc2>
+		friend bool operator!=(
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::const_iterator const &__x,
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::const_iterator const &__y
+		)
+		{
+			return (__x._M_current_pos != __y._M_current_pos)
+			       || (__x._M_root != __y._M_root);
+		}
+
+		template<typename _CharT2, typename _Traits2, typename _Alloc2>
 		friend bool operator<(
 			typename rope<_CharT2, _Traits2, _Alloc2>
 			::const_iterator const &__x,
@@ -974,18 +1013,36 @@ public:
 		}
 
 		template<typename _CharT2, typename _Traits2, typename _Alloc2>
-		friend typename rope<_CharT2, _Traits2, _Alloc2>
-		::difference_type operator-(
+		friend bool operator>(
 			typename rope<_CharT2, _Traits2, _Alloc2>
 			::const_iterator const &__x,
 			typename rope<_CharT2, _Traits2, _Alloc2>
 			::const_iterator const &__y
 		)
 		{
-			return static_cast<difference_type>(__x._M_current_pos)
-			       - static_cast<difference_type>(
-					__y._M_current_pos
-				);
+			return __x._M_current_pos > __y._M_current_pos;
+		}
+
+		template<typename _CharT2, typename _Traits2, typename _Alloc2>
+		friend bool operator<=(
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::const_iterator const &__x,
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::const_iterator const &__y
+		)
+		{
+			return __x._M_current_pos <= __y._M_current_pos;
+		}
+
+		template<typename _CharT2, typename _Traits2, typename _Alloc2>
+		friend bool operator>=(
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::const_iterator const &__x,
+			typename rope<_CharT2, _Traits2, _Alloc2>
+			::const_iterator const &__y
+		)
+		{
+			return __x._M_current_pos >= __y._M_current_pos;
 		}
 
 	protected:
@@ -1002,6 +1059,248 @@ public:
 		typedef rope_type::pointer              pointer;
 		typedef rope_type::size_type            size_type;
 		typedef rope_type::difference_type      difference_type;
+
+	rope_type &container()
+	{
+		return *_M_root_rope;
+	}
+
+	iterator()
+	: _M_root_rope(0)
+	{}
+
+	iterator(iterator const &__iter)
+	: _iterator_base(__iter), _M_root_rope(__iter._M_root_rope)
+	{}
+
+	iterator(rope_type &__r, size_type __pos)
+	: _iterator_base(std::get<0>(__r._M_treeplus), __pos),
+	  _M_root_rope(&__r)
+	{}
+
+	~iterator()
+	{}
+
+	iterator &operator=(iterator const &__iter)
+	{
+		if (__iter._M_buf_cur) {
+			_M_root_rope = __iter._M_root_rope;
+			this->_iterator_base::operator=(__iter);
+		} else {
+			this->_M_current_pos = __iter._M_current_pos;
+			this->_M_root = __iter._M_root;
+			this->_M_root_rope = __iter._M_root_rope;
+			this->_M_buf_cur = 0;
+		}
+		return *this;
+	}
+
+	reference operator*()
+	{
+		_M_check();
+
+		if (!this->_M_buf_cur)
+			return reference(_M_root_rope, this->_M_current_pos);
+		else
+			return reference(_M_root_rope, this->_M_current_pos,
+					 *this->_M_buf_cur);
+	}
+
+	reference operator*() const
+	{
+		return *const_cast<iterator &>(*this);
+	}
+
+	iterator &operator++()
+	{
+		this->_M_incr(1);
+		return *this;
+	}
+
+	iterator &operator+=(difference_type __n)
+	{
+		if (__n >= 0)
+			this->_M_incr(__n);
+		else
+			this->_M_decr(-__n);
+
+		return *this;
+	}
+
+	iterator &operator--()
+	{
+		this->_M_decr(1);
+		return *this;
+	}
+
+	iterator &operator-=(difference_type __n)
+	{
+		if (__n >= 0)
+			this->_M_decr(__n);
+		else
+			this->_M_incr(-__n);
+
+		return *this;
+	}
+
+	iterator operator++(int)
+	{
+		size_type __old_pos(this->_M_current_pos);
+		this->_M_incr(1);
+		return iterator(_M_root_rope, __old_pos);
+	}
+
+	iterator operator--(int)
+	{
+		size_type __old_pos(this->_M_current_pos);
+		this->_M_decr(1);
+		return iterator(_M_root_rope, __old_pos);
+	}
+
+	reference operator[](difference_type __n)
+	{
+		return reference(_M_root_rope, this->_M_current_pos + __n);
+	}
+
+	template<typename _CharT2, typename _Traits2, typename _Alloc2>
+        friend bool operator==(
+		typename rope<_CharT2, _Traits2, _Alloc2>::iterator const &__x,
+		typename rope<_CharT2, _Traits2, _Alloc2>::iterator const &__y
+	)
+	{
+		return (__x._M_current_pos == __y._M_current_pos)
+		       && (__x._M_root_rope == __y._M_root_rope);
+	}
+
+	template<typename _CharT2, typename _Traits2, typename _Alloc2>
+        friend bool operator!=(
+		typename rope<_CharT2, _Traits2, _Alloc2>::iterator const &__x,
+		typename rope<_CharT2, _Traits2, _Alloc2>::iterator const &__y
+	)
+	{
+		return (__x._M_current_pos != __y._M_current_pos)
+		       || (__x._M_root_rope != __y._M_root_rope);
+	}
+
+	template<typename _CharT2, typename _Traits2, typename _Alloc2>
+	friend bool operator<(
+		typename rope<_CharT2, _Traits2, _Alloc2>::iterator const &__x,
+		typename rope<_CharT2, _Traits2, _Alloc2>::iterator const &__y
+	)
+	{
+		return __x._M_current_pos < __y._M_current_pos;
+	}
+
+	template<typename _CharT2, typename _Traits2, typename _Alloc2>
+	friend bool operator>(
+		typename rope<_CharT2, _Traits2, _Alloc2>::iterator const &__x,
+		typename rope<_CharT2, _Traits2, _Alloc2>::iterator const &__y
+	)
+	{
+		return __x._M_current_pos > __y._M_current_pos;
+	}
+
+	template<typename _CharT2, typename _Traits2, typename _Alloc2>
+	friend bool operator<=(
+		typename rope<_CharT2, _Traits2, _Alloc2>::iterator const &__x,
+		typename rope<_CharT2, _Traits2, _Alloc2>::iterator const &__y
+	)
+	{
+		return __x._M_current_pos <= __y._M_current_pos;
+	}
+
+	template<typename _CharT2, typename _Traits2, typename _Alloc2>
+	friend bool operator>=(
+		typename rope<_CharT2, _Traits2, _Alloc2>::iterator const &__x,
+		typename rope<_CharT2, _Traits2, _Alloc2>::iterator const &__y
+	)
+	{
+		return __x._M_current_pos >= __y._M_current_pos;
+	}
+
+	template<typename _CharT2, typename _Traits2, typename _Alloc2>
+	friend typename rope<_CharT2, _Traits2, _Alloc2>
+	::iterator::difference_type operator-(
+		typename rope<_CharT2, _Traits2, _Alloc2>::iterator const &__x,
+		typename rope<_CharT2, _Traits2, _Alloc2>::iterator const &__y
+	)
+	{
+		return static_cast<difference_type>(__x._M_current_pos)
+		       - static_cast<difference_type>(__y._M_current_pos);
+	}
+
+	template<typename _CharT2, typename _Traits2, typename _Alloc2>
+	friend typename rope<_CharT2, _Traits2, _Alloc2>::iterator
+	operator-(
+		typename rope<_CharT2, _Traits2, _Alloc2>
+		::iterator const &__iter,
+		typename rope<_CharT2, _Traits2, _Alloc2>
+		::iterator::difference_type __n
+	)
+	{
+		typedef typename rope<_CharT2, _Traits2, _Alloc2>::iterator
+		iterator;
+
+		return iterator(
+			__iter._M_root_rope, __iter._M_current_pos - __n
+		);
+	}
+
+	template<typename _CharT2, typename _Traits2, typename _Alloc2>
+	friend typename rope<_CharT2, _Traits2, _Alloc2>::iterator
+	operator+(
+		typename rope<_CharT2, _Traits2, _Alloc2>
+		::iterator const &__iter,
+		typename rope<_CharT2, _Traits2, _Alloc2>
+		::iterator::difference_type __n
+	)
+	{
+		typedef typename rope<_CharT2, _Traits2, _Alloc2>::iterator
+		iterator;
+
+		return iterator(
+			__iter._M_root_rope, __iter._M_current_pos + __n
+		);
+	}
+
+	template<typename _CharT2, typename _Traits2, typename _Alloc2>
+	friend typename rope<_CharT2, _Traits2, _Alloc2>::iterator
+	operator+(
+		typename rope<_CharT2, _Traits2, _Alloc2>
+		::iterator::difference_type __n,
+		typename rope<_CharT2, _Traits2, _Alloc2>
+		::iterator const &__iter
+	)
+	{
+		typedef typename rope<_CharT2, _Traits2, _Alloc2>::iterator
+		iterator;
+
+		return iterator(
+			__iter._M_root_rope, __iter._M_current_pos + __n
+		);
+	}
+
+	protected:
+		iterator(rope_type *__r, size_type __pos)
+		: _iterator_base(std::get<0>(__r->_M_treeplus), __pos),
+		  _M_root_rope(__r)
+		{
+			if (!__r->empty())
+				_S_setcache(*this);
+		}
+
+		void _M_check()
+		{
+			if (std::get<0>(_M_root_rope->_M_treeplus)
+			    != this->_M_root) {
+				this->_M_root = std::get<0>(
+					_M_root_rope->_M_treeplus
+				);
+				this->_M_buf_ptr = 0;
+			}
+		}
+
+		rope_type *_M_root_rope;
 	};
 
 	bool empty() const
@@ -1845,6 +2144,16 @@ rope<_CharT, _Traits, _Alloc> operator+(
 }
 
 template <typename _CharT, typename _Traits, typename _Alloc>
+rope<_CharT, _Traits, _Alloc> &operator+=(
+	rope<_CharT, _Traits, _Alloc> &__l,
+	rope<_CharT, _Traits, _Alloc> const &__r
+)
+{
+	__l.append(__r);
+	return __l;
+}
+
+template <typename _CharT, typename _Traits, typename _Alloc>
 rope<_CharT, _Traits, _Alloc> operator+(
 	rope<_CharT, _Traits, _Alloc> const &__l,
 	_CharT const *__s
@@ -1866,6 +2175,16 @@ rope<_CharT, _Traits, _Alloc> operator+(
 }
 
 template <typename _CharT, typename _Traits, typename _Alloc>
+rope<_CharT, _Traits, _Alloc> &operator+=(
+	rope<_CharT, _Traits, _Alloc> &__l,
+	_CharT const *__s
+)
+{
+	__l.append(__s);
+	return __l;
+}
+
+template <typename _CharT, typename _Traits, typename _Alloc>
 rope<_CharT, _Traits, _Alloc> operator+(
 	rope<_CharT, _Traits, _Alloc> const &__l,
 	_CharT __c
@@ -1881,6 +2200,70 @@ rope<_CharT, _Traits, _Alloc> operator+(
 		);
 	else
 		return rope_type(1, __c, std::get<1>(__l._M_treeplus));
+}
+
+template <typename _CharT, typename _Traits, typename _Alloc>
+rope<_CharT, _Traits, _Alloc> &operator+=(
+	rope<_CharT, _Traits, _Alloc> &__l,
+	_CharT __c
+)
+{
+	__l.append(__c);
+	return __l;
+}
+
+template <typename _CharT, typename _Traits, typename _Alloc>
+bool operator<(
+	rope<_CharT, _Traits, _Alloc> const &__l,
+	rope<_CharT, _Traits, _Alloc> const &__r
+)
+{
+	return __l.compare(__r) < 0;
+}
+
+template <typename _CharT, typename _Traits, typename _Alloc>
+bool operator>(
+	rope<_CharT, _Traits, _Alloc> const &__l,
+	rope<_CharT, _Traits, _Alloc> const &__r
+)
+{
+	return __l.compare(__r) > 0;
+}
+
+template <typename _CharT, typename _Traits, typename _Alloc>
+bool operator<=(
+	rope<_CharT, _Traits, _Alloc> const &__l,
+	rope<_CharT, _Traits, _Alloc> const &__r
+)
+{
+	return __l.compare(__r) <= 0;
+}
+
+template <typename _CharT, typename _Traits, typename _Alloc>
+bool operator>=(
+	rope<_CharT, _Traits, _Alloc> const &__l,
+	rope<_CharT, _Traits, _Alloc> const &__r
+)
+{
+	return __l.compare(__r) >= 0;
+}
+
+template <typename _CharT, typename _Traits, typename _Alloc>
+bool operator==(
+	rope<_CharT, _Traits, _Alloc> const &__l,
+	rope<_CharT, _Traits, _Alloc> const &__r
+)
+{
+	return __l.compare(__r) == 0;
+}
+
+template <typename _CharT, typename _Traits, typename _Alloc>
+bool operator!=(
+	rope<_CharT, _Traits, _Alloc> const &__l,
+	rope<_CharT, _Traits, _Alloc> const &__r
+)
+{
+	return __l.compare(__r) != 0;
 }
 
 template <typename _CharT, typename _Traits, typename _Alloc>
