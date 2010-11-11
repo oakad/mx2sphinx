@@ -372,12 +372,22 @@ protected:
 	struct _rope_func : public _rope_rep
 	{
 		static const _rope_tag _S_ref_tag = _rope_tag::_S_func;
+		typedef std::function<void (size_type, size_type, _CharT *)>
+		func_type;
 
-		std::function<void (size_type, size_type, _CharT *)> _M_fn;
+		func_type _M_fn;
 
-		_rope_func(decltype(_M_fn) __f, size_type __len)
+		_rope_func(func_type __f, size_type __len)
 		: _rope_rep(_S_ref_tag, 0, true, __len), _M_fn(__f)
 		{}
+
+		static rope_func_ptr _S_make(func_type __f, size_type __len,
+					     _Alloc __a)
+		{
+			return allocate_counted<_rope_func>(
+				__a, __f, __len
+			);
+		}
 
 		/* _M_fn will be evaluated into a temporary leaf node,
 		 * before application of __f.
@@ -866,7 +876,7 @@ public:
 
 			if (this->_M_buf_cur && __next < this->_M_buf_end) {
 				this->_M_buf_cur = __next;
-				++(this->_M_cur_pos);
+				++(this->_M_current_pos);
 			} else
 				this->_M_incr(1);
 
@@ -977,6 +987,18 @@ public:
 			);
 		}
 
+		bool operator==(const_iterator const &__iter) const
+		{
+			return (this->_M_current_pos == __iter._M_current_pos)
+			       && (this->_M_root == __iter._M_root);
+		}
+
+		bool operator!=(const_iterator const &__iter) const
+		{
+			return (this->_M_current_pos != __iter._M_current_pos)
+			       || (this->_M_root != __iter._M_root);
+		}
+
 		template<typename _CharT2, typename _Traits2, typename _Alloc2>
 		friend bool operator==(
 			typename rope<_CharT2, _Traits2, _Alloc2>
@@ -1046,6 +1068,8 @@ public:
 		}
 
 	protected:
+		friend class rope;
+
 		const_iterator(rope_rep_ptr const &__root, size_type __pos)
 		: _iterator_base(__root, __pos)
 		{}
@@ -1100,9 +1124,9 @@ public:
 		_M_check();
 
 		if (!this->_M_buf_cur)
-			return reference(_M_root_rope, this->_M_current_pos);
+			return reference(*_M_root_rope, this->_M_current_pos);
 		else
-			return reference(_M_root_rope, this->_M_current_pos,
+			return reference(*_M_root_rope, this->_M_current_pos,
 					 *this->_M_buf_cur);
 	}
 
@@ -1160,6 +1184,18 @@ public:
 	reference operator[](difference_type __n)
 	{
 		return reference(_M_root_rope, this->_M_current_pos + __n);
+	}
+
+        bool operator==(iterator const &__iter) const
+	{
+		return (this->_M_current_pos == __iter._M_current_pos)
+		       && (this->_M_root_rope == __iter._M_root_rope);
+	}
+
+        bool operator!=(iterator const &__iter) const
+	{
+		return (this->_M_current_pos != __iter._M_current_pos)
+		       || (this->_M_root_rope != __iter._M_root_rope);
 	}
 
 	template<typename _CharT2, typename _Traits2, typename _Alloc2>
@@ -1281,6 +1317,8 @@ public:
 	}
 
 	protected:
+		friend class rope;
+
 		iterator(rope_type *__r, size_type __pos)
 		: _iterator_base(std::get<0>(__r->_M_treeplus), __pos),
 		  _M_root_rope(__r)
@@ -1296,7 +1334,7 @@ public:
 				this->_M_root = std::get<0>(
 					_M_root_rope->_M_treeplus
 				);
-				this->_M_buf_ptr = 0;
+				this->_M_buf_cur = 0;
 			}
 		}
 
@@ -1305,7 +1343,7 @@ public:
 
 	bool empty() const
 	{
-		return !(_M_treeplus._M_v);
+		return !(std::get<0>(_M_treeplus));
 	}
 
 	int compare(rope const &__r) const
@@ -2055,12 +2093,12 @@ public:
 
 	iterator mutable_begin()
 	{
-		return(iterator(this, 0));
+		return iterator(this, 0);
 	}
 
 	iterator mutable_end()
 	{
-		return(iterator(this, size()));
+		return iterator(this, size());
 	}
 
 	reverse_iterator mutable_rbegin()

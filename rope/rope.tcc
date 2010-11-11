@@ -290,7 +290,7 @@ template<typename _InputIterator, typename _Size, typename _OutputIterator>
 static bool _out_copy_n(_InputIterator __first, _Size __n,
 			_OutputIterator __result)
 {
-	copy_n(__first, __n, __result);
+	std::copy_n(__first, __n, __result);
 	return true;
 }
 
@@ -503,7 +503,7 @@ rope<_CharT, _Traits, _Alloc>::_iterator_base::_S_setbuf(
 	if (__l) {
 		__iter._M_buf_begin = __l->_M_data;
 		__iter._M_buf_cur = __iter._M_buf_begin + (__pos - __leaf_pos);
-		__iter._M_buf_end = __iter._M_buf_start + __l->_M_size;
+		__iter._M_buf_end = __iter._M_buf_begin + __l->_M_size;
 	} else {
 		size_type __len(_S_iterator_buf_len);
 		size_type __buf_start_pos(__leaf_pos);
